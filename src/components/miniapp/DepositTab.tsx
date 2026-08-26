@@ -14,7 +14,7 @@ import {
 const quickAmounts = [10000, 25000, 50000, 100000];
 
 export function DepositTab() {
-  const [methodId, setMethodId] = useState(paymentMethods[0].id);
+  const [methodId, setMethodId] = useState(paymentMethods[0]!.id);
   const [amount, setAmount] = useState("50000");
   const method = paymentMethods.find((m) => m.id === methodId)!;
   const numeric = Number(amount.replace(/[^\d]/g, "")) || 0;
