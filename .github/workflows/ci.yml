@@ -2,7 +2,8 @@
 #
 #   pull request             -> verify
 #   push to main             -> verify -> image (ghcr.io, tag sha-<7>) -> deploy to the VPS
-#   manual (workflow_dispatch) -> verify -> image   (never deploys; deploys only follow a merge)
+#   manual (workflow_dispatch) -> verify; on main also builds the image but never pushes it, and
+#                                 never deploys (deploys only follow a merge)
 #
 # The same shape is used by every repo of the cashier platform, so the four behave identically.
 # Third-party actions are pinned to a full commit SHA (a tag can be moved to point at other code;
@@ -73,8 +74,11 @@ jobs:
   image:
     name: Build and push image
     needs: verify
-    # Pull requests only verify. Their code is not trusted to push to the registry.
-    if: github.event_name != 'pull_request'
+    # Pull requests only verify. Their code is not trusted to push to the registry. main only, as in
+    # the backend and dashboard: a sha-<7> tag in the production package must always be a
+    # default-branch commit, because operators pick rollback targets from that list and the deploy
+    # repo's dispatch workflow checks only the tag's format.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -92,6 +96,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # sha-<7 chars> is only immutable because CI never writes it twice: GHCR tags are mutable, and a
+      # rebuild of the same commit weeks later (cold cache, newer base packages) would put different
+      # bytes behind a tag deploy.sh promises to roll back to exactly. So the image is pushed only on a
+      # `push` event (workflow_dispatch builds to prove the Dockerfile still works, then discards), and
+      # never when its sha tag is already in the registry — which also covers "Re-run all jobs" on an
+      # old push run, since a re-run keeps the original event. If the lookup itself fails (network,
+      # registry outage) the tag counts as absent and the push goes ahead, as before.
+      - name: Check whether this commit's image already exists
+        id: existing
+        run: |
+          image="${IMAGE}:sha-${GITHUB_SHA::7}"
+          if docker buildx imagetools inspect "$image" > /dev/null 2>&1; then
+            echo "::notice title=Image not re-pushed::$image already exists; it is never overwritten."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # sha-<7 chars> is the immutable tag deploy.sh deploys and rolls back to; the branch tag
       # (e.g. `main`) is a convenience pointer and is never deployed.
       - id: meta
@@ -105,7 +127,7 @@ jobs:
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          push: true
+          push: ${{ github.event_name == 'push' && steps.existing.outputs.exists != 'true' }}
           # The Contabo VPS is x86_64. Building arm64 too would double build time for nothing.
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
@@ -123,6 +145,12 @@ jobs:
     needs: image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # 45, not the 6-hour default and not less: deploy.sh first waits up to DEPLOY_LOCK_TIMEOUT
+    # (900 s) on flock while another repo deploys — and a backend deploy with a rollback can hold that
+    # lock for a long time — then this rollout is pull + up + the 180 s health gate, and on failure a
+    # rollback that runs the gate again, plus runner and SSH setup. A job timeout that fires inside
+    # that window cuts the session mid-rollout.
+    timeout-minutes: 45
     environment: production
     permissions:
       contents: read
@@ -146,6 +174,27 @@ jobs:
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only the newest commit on main may deploy from here. A re-run of an older run keeps its
+      # original GITHUB_SHA and push event, and an older run whose image build finished after a newer
+      # one's is not ordered behind it by the concurrency group (groups queue, they do not order) —
+      # either would silently move production back to an older release. Asked of GitHub at the moment
+      # the job runs, not of the event payload. An intentional rollback is not blocked by this: it
+      # goes through the deploy repo's "Deploy stack" workflow_dispatch, which deploys a chosen sha
+      # tag on purpose.
+      - name: Refuse to deploy a commit that is no longer the head of main
+        if: steps.target.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head_sha="$(git ls-remote "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)"
+          case "$head_sha" in
+            '' | *[!0-9a-f]*) echo "::error::Could not read the head of main (got '$head_sha'). Nothing was deployed."; exit 1 ;;
+          esac
+          if [ "$head_sha" != "$GITHUB_SHA" ]; then
+            echo "::error title=Stale deploy refused::$GITHUB_SHA is no longer the head of main ($head_sha is). Its own run deploys the newer commit; to roll back on purpose, use the deploy repo's Deploy stack workflow."
+            exit 1
           fi
 
       # The host key is PINNED (VPS_KNOWN_HOSTS, captured once with ssh-keyscan and checked by hand).

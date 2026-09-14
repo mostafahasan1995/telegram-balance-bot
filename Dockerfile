@@ -48,7 +48,13 @@ COPY package.json bun.lock bunfig.toml ./
 # --frozen-lockfile: fail instead of resolving anything new. If bun.lock is out of date with
 # package.json the build must STOP; silently re-resolving would mean production runs dependency
 # versions nobody reviewed. Fix it by running `bun install` locally and committing bun.lock.
-RUN bun install --frozen-lockfile
+#
+# The cache mount keeps bun's downloaded packages between builds on the same machine (never in the
+# image), so a lockfile change re-downloads only what changed. --backend=copyfile because bun's default
+# on Linux hardlinks from its cache, and a hardlink cannot point into a mount that vanishes when this
+# RUN ends: copying makes node_modules real files in the layer.
+RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
+    BUN_INSTALL_CACHE_DIR=/root/.bun/install/cache bun install --frozen-lockfile --backend=copyfile
 
 COPY . .
 
