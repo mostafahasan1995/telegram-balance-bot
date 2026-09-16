@@ -1,0 +1,29 @@
+# Line endings.
+#
+# This repo is built inside Linux containers (Dockerfile) and on Linux CI runners, but it is also
+# edited on Windows machines where core.autocrlf=true converts every text file to CRLF on checkout.
+# A CRLF Dockerfile or shell script fails inside a container in confusing ways (a shebang becomes
+# "/bin/sh^M: not found"), and Prettier's default endOfLine is "lf", so CRLF would also show up as
+# lint noise. Storing and checking out LF everywhere removes that whole class of problem.
+#
+# The git index already holds LF for every tracked text file, so this rule changes nothing that is
+# committed; it only stops Windows checkouts from rewriting files to CRLF.
+* text=auto eol=lf
+
+# Anything a Linux container executes or parses must be LF even if text detection ever guesses wrong.
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+bun.lock text eol=lf
+
+# Binary assets: never touch their bytes.
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,239 @@
+# CI/CD for the Telegram mini app.
+#
+#   pull request             -> verify
+#   push to main             -> verify -> image (ghcr.io, tag sha-<7>) -> deploy to the VPS
+#   manual (workflow_dispatch) -> verify; on main also builds the image but never pushes it, and
+#                                 never deploys (deploys only follow a merge)
+#
+# The same shape is used by every repo of the cashier platform, so the four behave identically.
+# Third-party actions are pinned to a full commit SHA (a tag can be moved to point at other code;
+# a SHA cannot). The comment next to each SHA is the release it was resolved from.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default. The image job widens this to packages: write for itself only.
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/mostafahasan1995/cashier-miniapp
+  # Kept identical to the Dockerfile so CI checks the same toolchain the image is built with.
+  NODE_VERSION: 22.23.2
+  BUN_VERSION: 1.4.2
+
+jobs:
+  verify:
+    name: Lint and build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # A newer push to the same PR/branch makes an in-flight verify pointless.
+    concurrency:
+      group: verify-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # bun.lock is the committed lockfile. --frozen-lockfile fails the job if it is out of date with
+      # package.json instead of quietly resolving new versions.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # NON-BLOCKING, deliberately and visibly. The existing Lovable-generated code does not pass
+      # `eslint .` today: 26 problems when this step was added (20 prettier/prettier errors across
+      # 12 files, mostly shadcn ui components and the miniapp tabs, plus 6 react-refresh warnings).
+      # Reformatting generated files here would fight Lovable's own sync, so that is left to a
+      # separate change. The step still runs and its findings show on every PR; remove
+      # `continue-on-error` once `bun run lint` is clean so lint starts gating merges.
+      - name: Lint (non-blocking until the existing findings are fixed)
+        continue-on-error: true
+        run: bun run lint
+
+      # Same build the Dockerfile runs: Node preset, vite under real Node.
+      - name: Build
+        env:
+          NITRO_PRESET: node-server
+        run: npx vite build
+
+  image:
+    name: Build and push image
+    needs: verify
+    # Pull requests only verify. Their code is not trusted to push to the registry. main only, as in
+    # the backend and dashboard: a sha-<7> tag in the production package must always be a
+    # default-branch commit, because operators pick rollback targets from that list and the deploy
+    # repo's dispatch workflow checks only the tag's format.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # sha-<7 chars> is only immutable because CI never writes it twice: GHCR tags are mutable, and a
+      # rebuild of the same commit weeks later (cold cache, newer base packages) would put different
+      # bytes behind a tag deploy.sh promises to roll back to exactly. So the image is pushed only on a
+      # `push` event (workflow_dispatch builds to prove the Dockerfile still works, then discards), and
+      # never when its sha tag is already in the registry — which also covers "Re-run all jobs" on an
+      # old push run, since a re-run keeps the original event. If the lookup itself fails (network,
+      # registry outage) the tag counts as absent and the push goes ahead, as before.
+      - name: Check whether this commit's image already exists
+        id: existing
+        run: |
+          image="${IMAGE}:sha-${GITHUB_SHA::7}"
+          if docker buildx imagetools inspect "$image" > /dev/null 2>&1; then
+            echo "::notice title=Image not re-pushed::$image already exists; it is never overwritten."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # sha-<7 chars> is the immutable tag deploy.sh deploys and rolls back to; the branch tag
+      # (e.g. `main`) is a convenience pointer and is never deployed.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
+
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' && steps.existing.outputs.exists != 'true' }}
+          # The Contabo VPS is x86_64. Building arm64 too would double build time for nothing.
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+            REVISION=${{ github.sha }}
+          # Layer cache in GitHub's cache service. A distinct scope per image, so the backend,
+          # dashboard and mini-app caches never evict each other.
+          cache-from: type=gha,scope=cashier-miniapp
+          cache-to: type=gha,mode=max,scope=cashier-miniapp
+
+  deploy:
+    name: Deploy to VPS
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # 45, not the 6-hour default and not less: deploy.sh first waits up to DEPLOY_LOCK_TIMEOUT
+    # (900 s) on flock while another repo deploys — and a backend deploy with a rollback can hold that
+    # lock for a long time — then this rollout is pull + up + the 180 s health gate, and on failure a
+    # rollback that runs the gate again, plus runner and SSH setup. A job timeout that fires inside
+    # that window cuts the session mid-rollout.
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+    # A second merge queues behind a running deploy instead of cancelling it: killing deploy.sh
+    # halfway could leave the stack between two versions. (GitHub keeps only the NEWEST waiting run,
+    # which is what we want: the latest merge is the one that should end up deployed.)
+    concurrency:
+      group: deploy-production-miniapp
+      cancel-in-progress: false
+    steps:
+      # Until the VPS secrets are configured this job succeeds with a notice instead of failing, so
+      # CI is green from day one. The secret is read through an env var because `secrets` cannot be
+      # used directly in a step `if:` expression.
+      - name: Check deploy target is configured
+        id: target
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -z "$VPS_HOST" ]; then
+            echo "::notice::VPS_HOST secret is not set; skipping deploy. The image was still pushed."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only the newest commit on main may deploy from here. A re-run of an older run keeps its
+      # original GITHUB_SHA and push event, and an older run whose image build finished after a newer
+      # one's is not ordered behind it by the concurrency group (groups queue, they do not order) —
+      # either would silently move production back to an older release. Asked of GitHub at the moment
+      # the job runs, not of the event payload. An intentional rollback is not blocked by this: it
+      # goes through the deploy repo's "Deploy stack" workflow_dispatch, which deploys a chosen sha
+      # tag on purpose.
+      - name: Refuse to deploy a commit that is no longer the head of main
+        if: steps.target.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head_sha="$(git ls-remote "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)"
+          case "$head_sha" in
+            '' | *[!0-9a-f]*) echo "::error::Could not read the head of main (got '$head_sha'). Nothing was deployed."; exit 1 ;;
+          esac
+          if [ "$head_sha" != "$GITHUB_SHA" ]; then
+            echo "::error title=Stale deploy refused::$GITHUB_SHA is no longer the head of main ($head_sha is). Its own run deploys the newer commit; to roll back on purpose, use the deploy repo's Deploy stack workflow."
+            exit 1
+          fi
+
+      # The host key is PINNED (VPS_KNOWN_HOSTS, captured once with ssh-keyscan and checked by hand).
+      # StrictHostKeyChecking=yes means a changed key aborts the deploy instead of handing the
+      # private key's session to whoever answers on that IP.
+      - name: Configure SSH
+        if: steps.target.outputs.configured == 'true'
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          umask 077
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # The remote command is fixed text plus a tag derived from GITHUB_SHA (hex only). Nothing a
+      # user controls (branch names, PR titles, commit messages) is ever put into it.
+      - name: Run deploy.sh on the VPS
+        if: steps.target.outputs.configured == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          TAG="sha-${GITHUB_SHA::7}"
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            -p "${VPS_PORT:-22}" \
+            "${VPS_USER}@${VPS_HOST}" \
+            "/opt/cashier/scripts/deploy.sh miniapp ${TAG}"
+
+      - name: Remove SSH key
+        if: always() && steps.target.outputs.configured == 'true'
+        run: rm -f ~/.ssh/deploy_key
