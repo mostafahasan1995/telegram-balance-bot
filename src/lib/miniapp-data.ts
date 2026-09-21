@@ -27,18 +27,19 @@ export const balance = {
   pendingAmount: 50000,
 };
 
+// For now only two deposit ways are offered: ShamCash and USDT.
 export const paymentMethods: PaymentMethod[] = [
   {
-    id: "bank",
-    name: "تحويل بنكي",
-    hint: "يُراجع خلال 15 دقيقة",
+    id: "shamcash",
+    name: "شام كاش",
+    hint: "يُراجع خلال 5 دقائق",
     min: 5000,
     max: 5000000,
   },
   {
-    id: "wallet",
-    name: "المحافظ الإلكترونية",
-    hint: "يُراجع خلال 5 دقائق",
+    id: "usdt",
+    name: "USDT (كريبتو)",
+    hint: "تحويل على الشبكة",
     min: 5000,
     max: 5000000,
   },
