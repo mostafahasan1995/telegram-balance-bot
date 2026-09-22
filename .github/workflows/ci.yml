@@ -65,6 +65,17 @@ jobs:
         continue-on-error: true
         run: bun run lint
 
+      # NON-BLOCKING for the same reason as lint, and equally deliberately: the Lovable-generated
+      # code does not typecheck cleanly today, so gating on it would turn CI red on changes that
+      # have nothing to do with the errors. tsconfig.json already sets `noEmit`, so the flag is
+      # only there to make the intent obvious at the call site. Runs before the build because a
+      # type error should be reported against the source, not discovered as a build failure. The
+      # step still runs and its findings show on every PR; remove `continue-on-error` once
+      # `npx tsc --noEmit` is clean so types start gating merges.
+      - name: Typecheck (non-blocking until the existing findings are fixed)
+        continue-on-error: true
+        run: npx tsc --noEmit
+
       # Same build the Dockerfile runs: Node preset, vite under real Node.
       - name: Build
         env:

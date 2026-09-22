@@ -12,6 +12,34 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
+// `process` is not in tsconfig's `types` and does not exist in the browser, so it is read off
+// globalThis rather than referenced directly.
+function serverApiBaseUrl(): string | undefined {
+  const proc = globalThis as { process?: { env?: Record<string, string | undefined> } };
+  return proc.process?.env?.["API_BASE_URL"];
+}
+
+// Hands the browser the API URL the server was configured with, before any bundle runs, so one
+// image can serve every environment. Returns undefined — and therefore renders no tag at all —
+// when API_BASE_URL is unset; the app then falls back to deriving api.<domain> from the hostname
+// (see src/lib/api/runtime-config.ts).
+function apiUrlScripts() {
+  // head() runs on the server and then again in the browser. `process` only answers on the server,
+  // so in the browser the value is read back off the global the server-rendered script already
+  // set: both passes emit the identical tag and hydration has nothing to reconcile.
+  const configured =
+    typeof window === "undefined" ? serverApiBaseUrl() : globalThis.__CASHIER_API_URL__;
+
+  // This ends up in the page as raw JavaScript, so anything that is not plainly a URL is dropped
+  // instead of rendered.
+  if (typeof configured !== "string" || !configured.startsWith("http")) return undefined;
+
+  // JSON.stringify quotes it and escapes quotes, backslashes and newlines; "<" is escaped on top
+  // of that so a value containing "</script>" cannot close the tag early.
+  const literal = JSON.stringify(configured).replace(/</g, "\\u003c");
+  return [{ children: `window.__CASHIER_API_URL__ = ${literal};` }];
+}
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -95,6 +123,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
+    // Rendered into <head> by <HeadContent />, ahead of the app bundle in <body>. Omitted
+    // entirely when the server has no API_BASE_URL configured.
+    scripts: apiUrlScripts(),
   }),
 
   shellComponent: RootShell,

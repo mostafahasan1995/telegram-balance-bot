@@ -2,7 +2,6 @@ import { Check, Copy } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
-import { statusLabel, type DepositStatus } from "@/lib/miniapp-data";
 
 export function SectionTitle({
   children,
@@ -38,7 +37,20 @@ export function Card({
   );
 }
 
-export function StatusChip({ status }: { status: DepositStatus }) {
+/**
+ * The three colours a request can wear. Deliberately NOT the backend's status enum: a player only
+ * needs "waiting", "done" or "no", and mapping the nine real statuses here would put a business
+ * rule in a chip. Each screen maps its own rows with `chipOf`.
+ */
+export type ChipStatus = "pending" | "approved" | "rejected";
+
+const CHIP_LABEL: Record<ChipStatus, string> = {
+  pending: "قيد المراجعة",
+  approved: "مقبول",
+  rejected: "مرفوض",
+};
+
+export function StatusChip({ status }: { status: ChipStatus }) {
   const tone =
     status === "approved"
       ? "bg-ok-soft text-ok"
@@ -48,7 +60,7 @@ export function StatusChip({ status }: { status: DepositStatus }) {
 
   return (
     <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", tone)}>
-      {statusLabel[status]}
+      {CHIP_LABEL[status]}
     </span>
   );
 }
@@ -115,6 +127,43 @@ export function CopyField({
       >
         {copied ? <Check className="size-4 text-brand" /> : <Copy className="size-4" />}
       </button>
+    </div>
+  );
+}
+
+/** The one place that decides which colour a deposit or withdrawal wears. */
+export function chipOf(status: string): ChipStatus {
+  if (status === "CREDITED" || status === "APPROVED" || status === "PAID") return "approved";
+  if (
+    status === "REJECTED" ||
+    status === "EXPIRED" ||
+    status === "CANCELLED" ||
+    status === "FAILED"
+  ) {
+    return "rejected";
+  }
+  return "pending";
+}
+
+/** A muted line while a query is in flight. Deliberately plain: a spinner in RTL draws the eye. */
+export function Loading({ label = "جارٍ التحميل…" }: { label?: string }) {
+  return <p className="px-1 py-6 text-center text-xs text-ink-muted">{label}</p>;
+}
+
+/** What the server said, verbatim — it is already Arabic and already written for the player. */
+export function ErrorLine({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="space-y-2 rounded-2xl bg-bad-soft px-4 py-3 text-center">
+      <p className="text-[12px] leading-relaxed text-bad">{message}</p>
+      {onRetry !== undefined && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="text-[11px] font-semibold text-bad underline underline-offset-4"
+        >
+          إعادة المحاولة
+        </button>
+      )}
     </div>
   );
 }
