@@ -195,3 +195,77 @@ export interface Paginated<T> {
   data: T[];
   meta: { total: number; limit: number; offset: number; hasMore: boolean };
 }
+
+/**
+ * Where a spin's prize stands, in the backend's own names (`wheel_spin_status`).
+ *
+ * IT IS NOT A PAYMENT STATUS, and two of the six catch people out: `NO_PRIZE` is a segment worth
+ * nothing, so it is finished the moment it is drawn and there is no credit to wait for; and
+ * `NEEDS_RECONCILIATION` does not mean the prize failed — it means nobody could prove whether it
+ * landed, so a person has to look. A screen that lumped either in with "on its way" would be
+ * telling the player to wait for something that is never coming.
+ */
+export type WheelSpinStatus =
+  | 'NO_PRIZE'
+  | 'AWARDED'
+  | 'CREDITING'
+  | 'CREDITED'
+  | 'CREDIT_FAILED'
+  | 'NEEDS_RECONCILIATION';
+
+/** A segment as a player sees it — the weights that decide the draw never leave the server. */
+export interface WheelSegmentView {
+  label: string;
+  amount: string;
+  amountMinor: string;
+}
+
+export interface WheelSpinView {
+  id: string;
+  shortId: string;
+  prizeLabel: string;
+  amount: string;
+  amountMinor: string;
+  currencyCode: string;
+  status: WheelSpinStatus;
+  createdAt: string;
+  creditedAt: string | null;
+}
+
+/** Why a player cannot spin right now. */
+export type WheelIneligibilityReason =
+  | 'DISABLED'
+  | 'NO_QUALIFYING_DEPOSIT'
+  | 'ALREADY_SPUN'
+  | 'PLAYER_NOT_ACTIVE'
+  | 'NOT_LINKED';
+
+/** GET /v1/wheel */
+export interface PlayerWheelView {
+  enabled: boolean;
+  currencyCode: string;
+  /** The smallest single credited deposit that earns a spin. */
+  minDeposit: string;
+  minDepositMinor: string;
+  /** Empty while the operator has never configured a wheel — then there is nothing to draw. */
+  segments: WheelSegmentView[];
+  canSpin: boolean;
+  /** Why not, when `canSpin` is false. */
+  reason: WheelIneligibilityReason | null;
+  /** This player's spin in the current campaign, once they have had it. */
+  spin: WheelSpinView | null;
+}
+
+/** POST /v1/wheel/spin */
+export interface SpinResultView {
+  spin: WheelSpinView;
+  /** The wheel the server drew from — the list `landOn` indexes, so the app draws THIS one. */
+  segments: WheelSegmentView[];
+  /**
+   * The index in `segments` the server drew. Null when the prize is no longer on the wheel (a
+   * replay after the operator edited it): show the result with NO animation.
+   */
+  landOn: number | null;
+  /** True when this answered with the player's existing spin instead of making a new one. */
+  replayed: boolean;
+}

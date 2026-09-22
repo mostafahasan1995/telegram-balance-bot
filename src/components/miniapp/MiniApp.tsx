@@ -1,17 +1,18 @@
 /**
- * The whole app: the sign-in gate, the five tabs, and the bar that switches them.
+ * The whole app: the sign-in gate, the six tabs, and the bar that switches them.
  *
  * IT LIVES IN A COMPONENT AND NOT IN A ROUTE because it is reachable at two paths — / and
  * /<tenant>, which is how an operator's mini app is addressed (app.<domain>/<tenant>). Both
  * routes render this, so there is one shell and no chance of the two drifting.
  */
-import { ArrowDownToLine, Home, LifeBuoy, ReceiptText, User } from "lucide-react";
+import { ArrowDownToLine, Gift, Home, LifeBuoy, ReceiptText, User } from "lucide-react";
 import { useState } from "react";
 
 import { AccountTab } from "@/components/miniapp/AccountTab";
 import { DepositTab } from "@/components/miniapp/DepositTab";
 import { HomeTab } from "@/components/miniapp/HomeTab";
 import { SupportTab } from "@/components/miniapp/SupportTab";
+import { WheelTab } from "@/components/miniapp/WheelTab";
 import { WithdrawTab } from "@/components/miniapp/WithdrawTab";
 import { useSession } from "@/lib/api/use-session";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ const tabs = [
   { id: "home", label: "الرئيسية", icon: Home },
   { id: "deposit", label: "إيداع", icon: ReceiptText },
   { id: "withdraw", label: "سحب", icon: ArrowDownToLine },
+  { id: "wheel", label: "العجلة", icon: Gift },
   { id: "account", label: "الحساب", icon: User },
   { id: "support", label: "الدعم", icon: LifeBuoy },
 ] as const;
@@ -45,12 +47,14 @@ export function MiniApp() {
         )}
         {tab === "deposit" && <DepositTab />}
         {tab === "withdraw" && <WithdrawTab />}
+        {tab === "wheel" && <WheelTab />}
         {tab === "account" && <AccountTab />}
         {tab === "support" && <SupportTab />}
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 border-t border-hairline bg-background/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-md items-center justify-between px-6 py-3">
+        {/* px-3, not px-6: six items have to stay readable on a 320px phone without shrinking. */}
+        <div className="mx-auto flex max-w-md items-center justify-between px-3 py-3">
           {tabs.map(({ id, label, icon: Icon }) => {
             const active = id === tab;
             return (

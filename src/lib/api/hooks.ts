@@ -29,8 +29,11 @@ import type {
   MeResponse,
   Paginated,
   PaymentMethodView,
+  PlayerWheelView,
   PlayerWithdrawalView,
+  SpinResultView,
   WalletView,
+  WheelSpinStatus,
 } from './types';
 
 const SECOND = 1000;
@@ -44,6 +47,7 @@ export const queryKeys = {
   deposit: (shortId: string) => ['deposits', shortId] as const,
   withdrawals: ['withdrawals'] as const,
   casinoCredentials: ['casino-credentials'] as const,
+  wheel: ['wheel'] as const,
 };
 
 /** The statuses a deposit is still moving through — the ones worth polling. */
@@ -278,6 +282,50 @@ export function useSendSupportMessage(): UseMutationResult<void, unknown, string
   return useMutation({
     mutationFn: (message: string) =>
       api<void>('/v1/support/messages', { method: 'POST', body: { message } }),
+  });
+}
+
+/** The statuses a prize is still moving through — the only ones worth another round trip. */
+const SETTLING_SPIN: readonly WheelSpinStatus[] = ['AWARDED', 'CREDITING'];
+
+/**
+ * The wheel: its segments, whether this player may spin, and their spin once they have had it.
+ *
+ * POLLED ONLY WHILE A PRIZE IS IN FLIGHT. The credit is handed to a worker that talks to the
+ * casino, so the result card has to settle by itself while the player watches it; the moment the
+ * spin reaches a final status there is nothing left to watch and the polling stops.
+ */
+export function useWheel(enabled: boolean): UseQueryResult<PlayerWheelView> {
+  return useQuery({
+    queryKey: queryKeys.wheel,
+    queryFn: () => api<PlayerWheelView>('/v1/wheel'),
+    enabled,
+    staleTime: 15 * SECOND,
+    refetchInterval: (query) => {
+      const status = query.state.data?.spin?.status;
+      return status !== undefined && SETTLING_SPIN.includes(status) ? 5 * SECOND : false;
+    },
+  });
+}
+
+/**
+ * One spin. No body: there is nothing a client may say about a spin.
+ *
+ * AND NO IDEMPOTENCY KEY, deliberately — unlike every other write in this file. One spin per
+ * campaign is a unique index on the server, so a retried tap, a replayed request, a second phone,
+ * all already answer with the first spin (`replayed: true`). A client key here would be a second,
+ * weaker copy of a guarantee that is already absolute.
+ */
+export function useSpinWheel(): UseMutationResult<SpinResultView, unknown, void> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<SpinResultView>('/v1/wheel/spin', { method: 'POST' }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.wheel });
+      // A credited prize is real money on the casino side, so the balance on the home screen and
+      // the account screen is stale from this moment.
+      void client.invalidateQueries({ queryKey: queryKeys.wallet });
+    },
   });
 }
 
