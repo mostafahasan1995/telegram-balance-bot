@@ -1,16 +1,42 @@
+/**
+ * The first screen: what the casino says the player has, the ways to add to it, and the last two
+ * operations.
+ *
+ * WHY THE BALANCE IS SOMETIMES A SENTENCE AND NOT A NUMBER: `casino.available === false` means the
+ * platform could not be read at that moment, which is NOT a zero balance. A 0 here would tell a
+ * player their money is gone, so the screen says so in words and keeps the sync time beside it.
+ */
+import type { LucideIcon } from "lucide-react";
 import { ArrowLeft, ArrowUpRight, Landmark, ShieldCheck, Wallet } from "lucide-react";
 
-import { Card, SectionTitle, StatusChip } from "./primitives";
-import {
-  CURRENCY,
-  balance,
-  deposits,
-  formatCompact,
-  formatMoney,
-  paymentMethods,
-} from "@/lib/miniapp-data";
+import { errorMessage } from "@/lib/api/client";
+import { useDeposits, usePaymentMethods, useWallet } from "@/lib/api/hooks";
+import { tap } from "@/lib/api/telegram";
+import type { PaymentRail } from "@/lib/api/types";
+import { dayMonthOf, formatAmount, formatWhole, timeOf } from "@/lib/money";
 
-export function HomeTab({ onDeposit }: { onDeposit: () => void }) {
+import { Card, ErrorLine, Loading, SectionTitle, StatusChip, chipOf } from "./primitives";
+
+/** Picked from the rail, so a method the operator adds tomorrow still gets an icon. */
+function railIcon(rail: PaymentRail): LucideIcon {
+  return rail === "BANK_TRANSFER" ? Landmark : Wallet;
+}
+
+export function HomeTab({
+  onDeposit,
+  onWithdraw,
+}: {
+  onDeposit: () => void;
+  onWithdraw: () => void;
+}) {
+  const wallet = useWallet(true);
+  const methods = usePaymentMethods(true);
+  const deposits = useDeposits(true);
+
+  const funds = wallet.data;
+  const rails = methods.data ?? [];
+  const recent = (deposits.data ?? []).slice(0, 2);
+
   return (
     <div className="space-y-7">
       <section className="space-y-4">
@@ -18,91 +44,167 @@ export function HomeTab({ onDeposit }: { onDeposit: () => void }) {
           <span className="text-sm font-medium text-ink-muted">
             الرصيد الحالي على المنصة
           </span>
-          <div className="flex items-baseline gap-2" dir="ltr">
-            <h1 className="text-4xl font-semibold leading-none tracking-tight tabular-nums">
-              {formatMoney(balance.amount)}
-            </h1>
-            <span className="text-lg font-medium text-brand">{CURRENCY}</span>
-          </div>
-          <p className="text-[11px] text-ink-muted">
-            آخر مزامنة {balance.updatedAt} · بانتظار الموافقة{" "}
-            <span className="tabular-nums">{formatCompact(balance.pendingAmount)}</span>{" "}
-            {CURRENCY}
-          </p>
+          {wallet.isPending && <Loading />}
+          {wallet.isError && (
+            <ErrorLine
+              message={errorMessage(wallet.error)}
+              onRetry={() => void wallet.refetch()}
+            />
+          )}
+          {funds !== undefined && (
+            <>
+              {funds.casino.available && funds.casino.balance !== null ? (
+                <div className="flex items-baseline gap-2" dir="ltr">
+                  <h1 className="text-4xl font-semibold leading-none tracking-tight tabular-nums">
+                    {formatAmount(funds.casino.balance.amount)}
+                  </h1>
+                  <span className="text-lg font-medium text-brand">{funds.currency}</span>
+                </div>
+              ) : (
+                <p className="text-base font-medium text-warn">
+                  تعذّر قراءة الرصيد من المنصة حالياً
+                </p>
+              )}
+              <p className="text-[11px] text-ink-muted">
+                آخر مزامنة <span className="tabular-nums">{timeOf(funds.casino.readAt)}</span>
+                {funds.pending.count > 0 && (
+                  <>
+                    {" · "}بانتظار الموافقة{" "}
+                    <span className="tabular-nums">
+                      {formatWhole(funds.pending.total.amount)}
+                    </span>{" "}
+                    {funds.currency}
+                  </>
+                )}
+              </p>
+            </>
+          )}
         </div>
 
-        <button
-          type="button"
-          onClick={onDeposit}
-          className="w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground shadow-teller ring-1 ring-brand transition-transform active:scale-[0.98]"
-        >
-          شحن الرصيد
-        </button>
+        <div className="grid gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              tap();
+              onDeposit();
+            }}
+            className="w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground shadow-teller ring-1 ring-brand transition-transform active:scale-[0.98]"
+          >
+            شحن الرصيد
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              tap();
+              onWithdraw();
+            }}
+            className="w-full rounded-2xl bg-card py-4 text-base font-medium text-brand shadow-teller ring-1 ring-brand/40 transition-transform hover:ring-brand active:scale-[0.98]"
+          >
+            سحب رصيد
+          </button>
+        </div>
       </section>
 
       <section className="space-y-3">
         <SectionTitle>طرق الدفع المتاحة</SectionTitle>
+        {methods.isPending && <Loading />}
+        {methods.isError && (
+          <ErrorLine
+            message={errorMessage(methods.error)}
+            onRetry={() => void methods.refetch()}
+          />
+        )}
+        {methods.isSuccess && rails.length === 0 && (
+          <p className="px-1 py-6 text-center text-xs text-ink-muted">
+            لا توجد طرق دفع متاحة حالياً.
+          </p>
+        )}
         <div className="grid gap-3">
-          {paymentMethods.map((method) => (
-            <button
-              key={method.id}
-              type="button"
-              onClick={onDeposit}
-              className="group flex items-center justify-between rounded-2xl bg-card p-4 text-start shadow-teller ring-1 ring-hairline transition-colors hover:ring-brand/40"
-            >
-              <div className="flex items-center gap-3">
-                <div className="grid size-10 place-items-center rounded-xl bg-secondary text-ink-muted">
-                  {method.id === "bank" ? (
-                    <Landmark className="size-5" />
-                  ) : (
-                    <Wallet className="size-5" />
-                  )}
-                </div>
-                <div className="space-y-0.5">
-                  <div className="font-medium">{method.name}</div>
-                  <div className="text-[11px] tabular-nums text-ink-muted" dir="rtl">
-                    الحدود: {formatCompact(method.min)} - {formatCompact(method.max)}{" "}
-                    {CURRENCY}
+          {rails.map((method) => {
+            const Icon = railIcon(method.rail);
+            return (
+              <button
+                key={method.id}
+                type="button"
+                onClick={onDeposit}
+                className="group flex items-center justify-between rounded-2xl bg-card p-4 text-start shadow-teller ring-1 ring-hairline transition-colors hover:ring-brand/40"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary text-ink-muted">
+                    <Icon className="size-5" />
                   </div>
-                  <div className="text-[11px] text-ink-muted">{method.hint}</div>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="font-medium">{method.displayName}</div>
+                    <div className="text-[11px] tabular-nums text-ink-muted" dir="rtl">
+                      الحدود: {formatWhole(method.minAmount)} - {formatWhole(method.maxAmount)}{" "}
+                      {method.currencyCode}
+                    </div>
+                    {method.instructions !== null && (
+                      <div className="truncate text-[11px] text-ink-muted">
+                        {method.instructions}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <ArrowLeft className="size-4 text-ink-muted transition-colors group-hover:text-brand" />
-            </button>
-          ))}
+                <ArrowLeft className="size-4 shrink-0 text-ink-muted transition-colors group-hover:text-brand" />
+              </button>
+            );
+          })}
         </div>
       </section>
 
       <section className="space-y-3">
         <SectionTitle
           action={
-            <span className="flex items-center gap-1 text-xs font-medium text-brand">
+            <button
+              type="button"
+              onClick={onDeposit}
+              className="flex items-center gap-1 text-xs font-medium text-brand"
+            >
               عرض الكل <ArrowUpRight className="size-3.5" />
-            </span>
+            </button>
           }
         >
           آخر العمليات
         </SectionTitle>
         <div className="space-y-2">
-          {deposits.slice(0, 2).map((deposit) => (
-            <Card key={deposit.id} className="flex items-center justify-between p-3">
-              <div className="flex items-center gap-3">
-                <div className="flex size-10 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary">
-                  <span className="text-[11px] font-bold tabular-nums">{deposit.day}</span>
-                  <span className="text-[9px] text-ink-muted">{deposit.month}</span>
-                </div>
-                <div>
-                  <div className="text-sm font-medium tabular-nums" dir="ltr">
-                    {formatMoney(deposit.amount)} {CURRENCY}
+          {deposits.isPending && <Loading />}
+          {deposits.isError && (
+            <ErrorLine
+              message={errorMessage(deposits.error)}
+              onRetry={() => void deposits.refetch()}
+            />
+          )}
+          {deposits.isSuccess && recent.length === 0 && (
+            <p className="px-1 py-6 text-center text-xs text-ink-muted">لا توجد عمليات بعد.</p>
+          )}
+          {recent.map((deposit) => {
+            const { day, month } = dayMonthOf(deposit.createdAt);
+            return (
+              <Card key={deposit.shortId} className="flex items-center justify-between p-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-10 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary">
+                    <span className="text-[11px] font-bold tabular-nums">{day}</span>
+                    {/* Two of the twelve Arabic month names are too wide for 40px; the box stays 40px. */}
+                    <span className="w-full truncate px-0.5 text-center text-[9px] text-ink-muted">
+                      {month}
+                    </span>
                   </div>
-                  <div className="text-[11px] text-ink-muted">
-                    {deposit.method} · {deposit.ref}
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium tabular-nums" dir="ltr">
+                      {formatAmount(deposit.claimed.amount)} {deposit.claimed.currency}
+                    </div>
+                    <div className="truncate text-[11px] text-ink-muted">
+                      {[deposit.destination?.methodName ?? "", deposit.shortId]
+                        .filter((part) => part.length > 0)
+                        .join(" · ")}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <StatusChip status={deposit.status} />
-            </Card>
-          ))}
+                <StatusChip status={chipOf(deposit.status)} />
+              </Card>
+            );
+          })}
         </div>
       </section>
 
