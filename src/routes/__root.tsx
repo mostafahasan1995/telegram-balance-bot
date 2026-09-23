@@ -42,19 +42,16 @@ function apiUrlScripts() {
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+    <div dir="rtl" className="flex min-h-screen items-center justify-center bg-background px-5">
+      <div className="w-full max-w-sm text-center">
+        <p className="app-num text-5xl font-semibold text-ink-muted">404</p>
+        <h1 className="mt-3 text-title font-semibold text-ink">الصفحة غير موجودة</h1>
+        <p className="mt-1 text-small text-ink-muted">
+          الرابط الذي فتحته غير صحيح أو لم يعد متاحاً.
         </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go home
+        <div className="mt-5">
+          <Link to="/" className="app-btn app-btn-primary">
+            العودة إلى الرئيسية
           </Link>
         </div>
       </div>
@@ -70,29 +67,27 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+    <div dir="rtl" className="flex min-h-screen items-center justify-center bg-background px-5">
+      <div className="w-full max-w-sm space-y-4 text-center">
+        <div className="space-y-1">
+          <h1 className="text-title font-semibold text-ink">تعذّر فتح هذه الصفحة</h1>
+          <p className="text-small text-ink-muted">
+            حدث خطأ غير متوقع. يمكنك إعادة المحاولة أو العودة إلى الرئيسية.
+          </p>
+        </div>
+        <div className="grid gap-2">
           <button
+            type="button"
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="app-btn app-btn-primary"
           >
-            Try again
+            إعادة المحاولة
           </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Go home
+          <a href="/" className="app-btn app-btn-soft">
+            العودة إلى الرئيسية
           </a>
         </div>
       </div>
@@ -105,7 +100,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Ichancy Cashier" },
+      // Arabic, because Telegram prints this above the webview and it is the first word a player
+      // reads. An operator's own title replaces it from `useBrand()` as soon as branding lands.
+      { title: "الكاشير" },
       { name: "description", content: "تطبيق مصغر لشحن الرصيد ومتابعة الإيداعات." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -136,7 +133,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // Every string a player reads here is Arabic, so the document says so: `lang` picks the right
+    // font and line-breaking, and `dir` makes RTL the default rather than something each screen
+    // has to remember to ask for.
+    <html lang="ar" dir="rtl">
       <head>
         <HeadContent />
       </head>

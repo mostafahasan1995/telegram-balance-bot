@@ -22,7 +22,9 @@ import {
 } from '@tanstack/react-query';
 
 import { api } from './client';
+import { tenantSlug } from './runtime-config';
 import type {
+  Branding,
   CasinoCredentials,
   DepositStatus,
   DepositView,
@@ -49,6 +51,8 @@ export const queryKeys = {
   withdrawals: ['withdrawals'] as const,
   casinoCredentials: ['casino-credentials'] as const,
   wheel: ['wheel'] as const,
+  /** Keyed by slug: one webview only ever shows one operator, but the key must say which. */
+  branding: (slug: string) => ['branding', slug] as const,
 };
 
 /**
@@ -94,6 +98,30 @@ const OPEN_WITHDRAWAL: readonly WithdrawalStatus[] = ['REQUESTED', 'UNDER_REVIEW
 
 export function isOpenWithdrawal(status: WithdrawalStatus): boolean {
   return OPEN_WITHDRAWAL.includes(status);
+}
+
+/**
+ * The operator's own look, read before anything else and never waited on.
+ *
+ * NOT GATED ON THE SESSION, unlike every other read here: the route is public precisely so the app
+ * can paint while it is still signing in — and so a player who lands on the code screen still sees
+ * their operator's app rather than a grey box.
+ *
+ * FAILURE IS NORMAL AND SILENT. An operator that has set nothing, a slug that does not resolve, a
+ * backend that predates the route — all of them answer 404, and the screens already look right
+ * with every field absent. So: no retry, a long stale time, and nothing anywhere reads its error.
+ */
+export function useBranding(): UseQueryResult<Branding> {
+  const tenant = tenantSlug();
+  return useQuery({
+    queryKey: queryKeys.branding(tenant ?? ''),
+    queryFn: () => api<Branding>(`/v1/app/${encodeURIComponent(tenant ?? '')}/branding`),
+    // A slug is the whole address of the thing being asked for; without one there is nothing to ask.
+    enabled: tenant !== null,
+    staleTime: 10 * MINUTE,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useMe(enabled: boolean): UseQueryResult<MeResponse> {

@@ -5,9 +5,13 @@
  * a tab that is opened to check a Telegram id should not put one on screen — or in a cache — for
  * anyone standing behind the player. They are read only after an explicit tap, and hidden again on
  * request.
+ *
+ * THE PANEL IS THIS SCREEN'S ONE ELEVATED SURFACE, in the app's dark ink rather than the operator's
+ * colour: it is an identity card, it is the same on every screen it appears on, and everything
+ * under it is a flat card like everywhere else in the app.
  */
-import { BadgeCheck, Check, Copy, ExternalLink, KeyRound } from "lucide-react";
-import { useState } from "react";
+import { BadgeCheck, Check, ChevronLeft, Copy, ExternalLink, KeyRound } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import { errorMessage } from "@/lib/api/client";
 import { useCasinoCredentials, useMe } from "@/lib/api/hooks";
@@ -15,7 +19,16 @@ import { openExternal, tap } from "@/lib/api/telegram";
 import type { PlayerStatus, PlayerView } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
-import { Card, ErrorLine, Loading, SectionTitle, Skeleton, enterDelay } from "./primitives";
+import {
+  ActionButton,
+  Card,
+  ErrorLine,
+  Loading,
+  Num,
+  SectionTitle,
+  Skeleton,
+  enterDelay,
+} from "./primitives";
 
 const STATUS_LABEL: Record<PlayerStatus, string> = {
   ACTIVE: "نشط",
@@ -59,53 +72,44 @@ export function AccountTab() {
   const secrets = credentials.data;
 
   return (
-    <div className="space-y-7">
-      <section className="space-y-4 rounded-3xl bg-panel p-5 text-panel-foreground shadow-teller">
+    <div className="space-y-6">
+      <section className="app-hero space-y-4 bg-panel text-panel-foreground">
         {me.isPending && <ProfileSkeleton />}
         {me.isError && (
           <ErrorLine message={errorMessage(me.error)} onRetry={() => void me.refetch()} />
         )}
         {player !== undefined && (
           <>
-            <div className="app-enter flex items-center gap-4">
-              <div className="grid size-12 shrink-0 place-items-center rounded-full bg-white/10 text-lg font-medium outline-1 -outline-offset-1 outline-white/10">
+            <div className="app-enter flex items-center gap-3">
+              <span className="grid size-12 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-body font-semibold">
                 {initialsOf(name)}
-              </div>
-              <div className="min-w-0 space-y-0.5">
-                <div className="truncate font-medium">{name}</div>
+              </span>
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="truncate text-body font-semibold">{name}</div>
                 {player.telegramUsername !== null && (
-                  <div className="truncate text-xs text-panel-foreground/60" dir="ltr">
-                    @{player.telegramUsername}
-                  </div>
-                )}
-                {player.telegramUserId !== null && (
-                  <div className="text-xs tabular-nums text-panel-foreground/60" dir="ltr">
-                    ID: {player.telegramUserId}
+                  <div className="truncate text-micro text-panel-foreground/60">
+                    <Num>@{player.telegramUsername}</Num>
                   </div>
                 )}
               </div>
-              <div className="ms-auto flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium">
-                <BadgeCheck className="size-3.5 text-brand" />
+              <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-micro font-semibold">
+                <BadgeCheck className="size-3.5 shrink-0" />
                 {STATUS_LABEL[player.status]}
-              </div>
+              </span>
             </div>
 
-            <div className="flex items-center justify-between border-t border-white/10 pt-4">
-              <div className="space-y-0.5">
-                <span className="text-[10px] text-panel-foreground/50">حالة اللعب</span>
-                <div
-                  className={cn(
-                    "text-xs font-medium",
-                    player.ichancyLinked ? "text-brand" : "text-panel-foreground/70",
-                  )}
-                >
+            <div className="grid grid-cols-3 gap-3 border-t border-white/10 pt-4">
+              <PanelFact label="حالة اللعب">
+                <span className={player.ichancyLinked ? "" : "text-panel-foreground/70"}>
                   {player.ichancyLinked ? "حساب مرتبط" : "غير مرتبط"}
-                </div>
-              </div>
-              <div className="space-y-0.5 text-start">
-                <span className="text-[10px] text-panel-foreground/50">العملة</span>
-                <div className="text-xs font-medium tabular-nums">{player.currencyCode}</div>
-              </div>
+                </span>
+              </PanelFact>
+              <PanelFact label="العملة">
+                <Num>{player.currencyCode}</Num>
+              </PanelFact>
+              <PanelFact label="معرّف تلغرام">
+                {player.telegramUserId === null ? "—" : <Num>{player.telegramUserId}</Num>}
+              </PanelFact>
             </div>
           </>
         )}
@@ -113,23 +117,18 @@ export function AccountTab() {
 
       <section className="space-y-3">
         <SectionTitle>بيانات الدخول للمنصة</SectionTitle>
-        <Card className="space-y-3 p-5">
+        <Card className="space-y-3">
           {!revealed ? (
-            <button
-              type="button"
+            <ActionButton
+              tone="soft"
+              icon={KeyRound}
               onClick={() => {
                 tap();
                 setRevealed(true);
               }}
-              className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-xl bg-secondary py-3",
-                "text-sm font-medium ring-1 ring-hairline transition hover:ring-brand/40",
-                "active:scale-[0.98] active:ring-brand/40",
-              )}
             >
-              <KeyRound className="size-4 text-brand" />
               إظهار بيانات الدخول
-            </button>
+            </ActionButton>
           ) : credentials.isPending ? (
             // A panel the player just asked to open: there is no shape to stand in for yet, and a
             // skeleton of a password would be a strange thing to draw.
@@ -148,17 +147,19 @@ export function AccountTab() {
                   tap();
                   openExternal(siteUrl(secrets.site));
                 }}
-                className="app-enter flex items-center gap-2 text-sm font-medium transition active:scale-[0.98]"
+                className="app-enter flex w-full min-w-0 items-center gap-2 text-start"
               >
-                <KeyRound className="size-4 text-brand" />
-                {secrets.site}
-                <ExternalLink className="size-3.5 text-ink-muted" />
+                <KeyRound className="size-4 shrink-0 text-brand-ink" />
+                <span className="app-code min-w-0 flex-1 truncate text-small font-semibold text-ink">
+                  {secrets.site}
+                </span>
+                <ExternalLink className="size-3.5 shrink-0 text-ink-muted" />
               </button>
               <CopyRow label="اسم المستخدم" value={secrets.login} />
               <CopyRow label="كلمة السر" value={secrets.password} masked />
-              <p className="text-[11px] leading-relaxed text-ink-muted">
-                احفظ هذه البيانات ولا تشاركها مع أي شخص. يُنصح بتغيير كلمة السر من الموقع بعد
-                أول تسجيل دخول — الشحن والسحب يبقى يعمل بشكل طبيعي.
+              <p className="text-small text-ink-muted">
+                احفظ هذه البيانات ولا تشاركها مع أي شخص. يُنصح بتغيير كلمة السر من الموقع بعد أول
+                تسجيل دخول — الشحن والسحب يبقى يعمل بشكل طبيعي.
               </p>
               <HideButton onHide={() => setRevealed(false)} />
             </>
@@ -168,23 +169,34 @@ export function AccountTab() {
 
       <section className="space-y-3">
         <SectionTitle>الشروط والأحكام</SectionTitle>
-        <Card className="divide-y divide-hairline">
+        <Card flush className="divide-y divide-hairline">
           {["شروط الاستخدام", "سياسة الإيداع والسحب", "سياسة الخصوصية"].map((item, index) => (
             <button
               key={item}
               type="button"
               style={enterDelay(index)}
               className={cn(
-                "app-enter flex w-full items-center justify-between px-5 py-3.5 text-sm",
-                "transition first:rounded-t-2xl last:rounded-b-2xl active:bg-secondary",
+                "app-enter flex w-full items-center justify-between gap-3 px-4 py-3.5",
+                "text-start text-body transition first:rounded-t-xl last:rounded-b-xl",
+                "active:bg-secondary",
               )}
             >
-              {item}
-              <span className="text-ink-muted">←</span>
+              <span className="min-w-0 truncate">{item}</span>
+              <ChevronLeft className="size-4 shrink-0 text-ink-muted" />
             </button>
           ))}
         </Card>
       </section>
+    </div>
+  );
+}
+
+/** One of the three facts along the foot of the panel. Fixed columns, so none of them can push. */
+function PanelFact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-0.5">
+      <div className="truncate text-nano text-panel-foreground/50">{label}</div>
+      <div className="truncate text-micro font-semibold">{children}</div>
     </div>
   );
 }
@@ -197,12 +209,11 @@ export function AccountTab() {
  */
 function ProfileSkeleton() {
   return (
-    <div role="status" aria-label="جارٍ التحميل…" className="flex items-center gap-4">
+    <div role="status" aria-label="جارٍ التحميل…" className="flex items-center gap-3">
       <Skeleton onPanel className="size-12 shrink-0 rounded-full" />
       <div className="min-w-0 flex-1 space-y-1.5">
         <Skeleton onPanel className="h-4 w-32 rounded-md" />
         <Skeleton onPanel className="h-3 w-24 rounded-md" />
-        <Skeleton onPanel className="h-3 w-20 rounded-md" />
       </div>
       <Skeleton onPanel className="h-6 w-16 shrink-0 rounded-full" />
     </div>
@@ -217,10 +228,7 @@ function HideButton({ onHide }: { onHide: () => void }) {
         tap();
         onHide();
       }}
-      className={cn(
-        "w-full rounded-xl bg-secondary py-2.5 text-xs font-medium text-ink-muted ring-1",
-        "ring-hairline transition hover:ring-brand/40 active:scale-[0.98]",
-      )}
+      className="app-btn app-btn-soft py-2.5 text-small text-ink-muted"
     >
       إخفاء
     </button>
@@ -258,16 +266,15 @@ function CopyRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 ring-1",
-        "transition-colors",
-        copied ? "ring-brand/40" : "ring-hairline",
+        "app-inset flex items-start justify-between gap-3 p-3 transition-shadow",
+        copied && "outline-1 -outline-offset-1 outline-brand/50",
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div
           className={cn(
-            "mb-0.5 text-[10px] font-medium tracking-wide",
-            copied ? "text-brand" : "text-ink-muted",
+            "mb-1 text-micro font-medium",
+            copied ? "text-brand-ink" : "text-ink-muted",
           )}
         >
           {copied ? <span className="app-value inline-block">تم النسخ</span> : label}
@@ -276,10 +283,7 @@ function CopyRow({
           type="button"
           onClick={() => masked && setShown((current) => !current)}
           dir="ltr"
-          className={cn(
-            "block max-w-[210px] truncate text-start font-mono text-[13px] text-ink",
-            "transition-opacity active:opacity-60",
-          )}
+          className="app-code block w-full text-start text-small text-ink transition-opacity active:opacity-60"
         >
           {shown ? value : "••••••••••••"}
         </button>
@@ -288,13 +292,10 @@ function CopyRow({
         type="button"
         aria-label={`نسخ ${label}`}
         onClick={() => void copy()}
-        className={cn(
-          "grid size-8 shrink-0 place-items-center rounded-lg bg-card text-ink-muted ring-1",
-          "ring-hairline transition hover:text-brand active:scale-90",
-        )}
+        className="app-tile size-9 shrink-0 border border-hairline bg-card text-ink-muted transition active:scale-90"
       >
         {copied ? (
-          <Check className="app-value size-4 text-brand" />
+          <Check className="app-value size-4 text-brand-ink" />
         ) : (
           <Copy className="size-4" />
         )}

@@ -8,6 +8,10 @@
  *  - WHAT COUNTS AS A VALID PAYOUT ADDRESS. A crypto address is matched to its network on the
  *    server (a TRC20 address pasted for BEP20 is money gone), so this only refuses an empty box and
  *    shows whatever the server says about the rest.
+ *
+ * AND THE ADDRESS IS NEVER TRUNCATED. It is 42 unbreakable characters inside a 288px screen, so it
+ * wraps (`.app-code`) — a player checking where their money is going has to be able to read all of
+ * it, and an ellipsis in the middle of a wallet address is worse than useless.
  */
 import { ArrowDownToLine, Landmark, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -22,28 +26,25 @@ import {
 } from "@/lib/api/hooks";
 import { tap } from "@/lib/api/telegram";
 import type { PaymentMethodView } from "@/lib/api/types";
-import {
-  dayMonthOf,
-  formatAmount,
-  formatWhole,
-  fromMinor,
-  scaleOf,
-  timeOf,
-  toMinor,
-} from "@/lib/money";
+import { formatAmount, formatWhole, fromMinor, scaleOf, timeOf, toMinor } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 import {
+  ActionButton,
   Card,
   EmptyState,
   ErrorLine,
-  FadingValue,
+  Hero,
   MethodCardsSkeleton,
+  Money,
+  Num,
+  OperationRow,
   Refreshing,
   RowsSkeleton,
   SectionTitle,
   Skeleton,
   StatusChip,
+  StepTitle,
   chipOf,
   enterDelay,
 } from "./primitives";
@@ -73,6 +74,7 @@ export function WithdrawTab() {
     active !== null && minor !== null && BigInt(minor) > 0n && address.trim().length > 0;
 
   const balance = wallet.data?.casino.balance?.amount ?? null;
+  const isCrypto = active?.rail === "CRYPTO";
 
   async function submit(): Promise<void> {
     if (active === null || minor === null) return;
@@ -94,28 +96,30 @@ export function WithdrawTab() {
   // The same three-step shape the screen is about to have, so nothing moves when it arrives.
   if (methods.isPending) {
     return (
-      <div className="space-y-7">
+      <div className="space-y-6">
         <section className="space-y-3">
-          <SectionTitle>1 · طريقة الاستلام</SectionTitle>
+          <StepTitle step={1}>طريقة الاستلام</StepTitle>
           <MethodCardsSkeleton />
         </section>
         <section className="space-y-3">
-          <SectionTitle>2 · المبلغ</SectionTitle>
+          <StepTitle step={2}>المبلغ</StepTitle>
           <Skeleton className="h-[124px] rounded-2xl" />
         </section>
         <section className="space-y-3">
-          <SectionTitle>3 · حساب الاستلام</SectionTitle>
-          <Skeleton className="h-[136px] rounded-2xl" />
+          <StepTitle step={3}>حساب الاستلام</StepTitle>
+          <Skeleton className="h-[132px] rounded-xl" />
         </section>
       </div>
     );
   }
   if (methods.isError) {
-    return <ErrorLine message={errorMessage(methods.error)} onRetry={() => void methods.refetch()} />;
+    return (
+      <ErrorLine message={errorMessage(methods.error)} onRetry={() => void methods.refetch()} />
+    );
   }
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       {open !== null ? (
         <section className="space-y-3">
           <SectionTitle
@@ -123,27 +127,41 @@ export function WithdrawTab() {
           >
             طلب السحب الحالي
           </SectionTitle>
-          <Card className="app-enter space-y-2 p-5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-lg font-semibold tabular-nums" dir="ltr">
-                {formatAmount(open.amount.amount)} {open.amount.currency}
-              </span>
+          <Hero className="app-enter space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <Money
+                amount={formatAmount(open.amount.amount)}
+                currency={open.amount.currency}
+                className="text-figure font-semibold text-ink"
+                unitClassName="text-small"
+              />
               <StatusChip status={chipOf(open.status)} />
             </div>
-            <p className="text-[12px] text-ink-muted">
-              {open.methodName} · {open.payoutAddress}
-              {open.payoutNetwork === null ? "" : ` · ${open.payoutNetwork}`}
+
+            <div className="app-inset space-y-1 p-3">
+              <div className="text-micro font-medium text-ink-muted">حساب الاستلام</div>
+              <div className="app-code text-small text-ink">{open.payoutAddress}</div>
+            </div>
+
+            <p className="break-words text-micro text-ink-muted">
+              {open.methodName}
+              {open.payoutNetwork !== null && (
+                <>
+                  {" · "}
+                  <Num>{open.payoutNetwork}</Num>
+                </>
+              )}
             </p>
-            <p className="text-[11px] text-ink-muted">
+            <p className="text-small text-ink-muted">
               طلبك قيد المعالجة. لا يمكن فتح طلب سحب جديد قبل إنهاء هذا الطلب.
             </p>
-          </Card>
+          </Hero>
         </section>
       ) : (
         <>
           <section className="space-y-3">
-            <SectionTitle>1 · طريقة الاستلام</SectionTitle>
-            <div className="grid grid-cols-2 gap-3">
+            <StepTitle step={1}>طريقة الاستلام</StepTitle>
+            <div className="grid grid-cols-2 gap-2.5">
               {(methods.data ?? []).map((method, index) => {
                 const selected = method.id === active?.id;
                 return (
@@ -156,19 +174,17 @@ export function WithdrawTab() {
                     }}
                     style={enterDelay(index)}
                     className={cn(
-                      "app-enter rounded-2xl p-4 text-start shadow-teller ring-1",
-                      "transition active:scale-[0.98]",
+                      "app-enter flex h-[116px] min-w-0 flex-col justify-between rounded-xl p-4",
+                      "text-start transition active:scale-[0.98]",
                       selected
-                        ? "bg-brand-soft ring-brand/50"
-                        : "bg-card ring-hairline hover:ring-brand/30",
+                        ? "bg-brand-soft outline-2 -outline-offset-2 outline-brand/60"
+                        : "app-card-flush",
                     )}
                   >
-                    <div
+                    <span
                       className={cn(
-                        "mb-3 grid size-9 place-items-center rounded-xl transition-colors",
-                        selected
-                          ? "bg-brand text-brand-foreground"
-                          : "bg-secondary text-ink-muted",
+                        "app-tile size-9",
+                        selected ? "bg-brand text-brand-foreground" : "bg-secondary text-ink-muted",
                       )}
                     >
                       {method.rail === "BANK_TRANSFER" ? (
@@ -176,11 +192,17 @@ export function WithdrawTab() {
                       ) : (
                         <Wallet className="size-4" />
                       )}
-                    </div>
-                    <div className="text-sm font-medium">{method.displayName}</div>
-                    <div className="text-[10px] tabular-nums text-ink-muted" dir="ltr">
-                      {formatWhole(method.minAmount)} - {formatWhole(method.maxAmount)}
-                    </div>
+                    </span>
+                    <span className="block min-w-0 space-y-0.5">
+                      <span className="block truncate text-small font-semibold text-ink">
+                        {method.displayName}
+                      </span>
+                      <span className="block truncate text-micro text-ink-muted">
+                        <Num>
+                          {formatWhole(method.minAmount)} – {formatWhole(method.maxAmount)}
+                        </Num>
+                      </span>
+                    </span>
                   </button>
                 );
               })}
@@ -188,44 +210,55 @@ export function WithdrawTab() {
           </section>
 
           <section className="space-y-3">
-            <SectionTitle>2 · المبلغ</SectionTitle>
-            <Card className="space-y-4 p-5">
-              <div className="flex items-baseline gap-2 border-b border-hairline pb-3" dir="ltr">
+            <StepTitle step={2}>المبلغ</StepTitle>
+            <Hero className="space-y-3">
+              <div className="flex items-baseline gap-2 border-b border-hairline pb-3">
                 <input
+                  dir="ltr"
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
                   inputMode="numeric"
-                  className="w-full bg-transparent text-3xl font-semibold tabular-nums tracking-tight outline-none placeholder:text-ink-muted/40"
+                  aria-label="مبلغ السحب"
                   placeholder="0"
+                  className={cn(
+                    "app-num min-w-0 flex-1 bg-transparent text-end text-display font-semibold",
+                    "outline-none placeholder:text-ink-muted/50",
+                  )}
                 />
-                <span className="text-base font-medium text-brand">
+                <span className="shrink-0 text-body font-semibold text-ink-muted">
                   {active?.currencyCode ?? ""}
                 </span>
               </div>
               {balance !== null && (
-                <p className="text-[11px] tabular-nums text-ink-muted" dir="rtl">
-                  رصيدك على المنصة: <FadingValue value={formatAmount(balance)} />{" "}
-                  {wallet.data?.currency ?? ""}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="shrink-0 text-micro text-ink-muted">رصيدك على المنصة</span>
+                  <Money
+                    fade
+                    amount={formatAmount(balance)}
+                    currency={wallet.data?.currency ?? ""}
+                    className="text-small font-semibold text-ink"
+                    unitClassName="text-micro"
+                  />
+                </div>
               )}
-            </Card>
+            </Hero>
           </section>
 
           <section className="space-y-3">
-            <SectionTitle>3 · حساب الاستلام</SectionTitle>
-            <Card className="space-y-1.5 p-5">
-              <label className="px-1 text-xs font-medium" htmlFor="payout-address">
-                {active?.rail === "CRYPTO" ? "عنوان المحفظة" : "رقم الحساب"}
+            <StepTitle step={3}>حساب الاستلام</StepTitle>
+            <Card className="space-y-1.5">
+              <label className="block text-small font-semibold text-ink" htmlFor="payout-address">
+                {isCrypto ? "عنوان المحفظة" : "رقم الحساب"}
               </label>
               <input
                 id="payout-address"
                 dir="ltr"
                 value={address}
                 onChange={(event) => setAddress(event.target.value)}
-                placeholder={active?.rail === "CRYPTO" ? "T… أو 0x…" : "09xxxxxxxx"}
-                className="w-full rounded-xl border border-hairline bg-secondary px-3 py-2.5 font-mono text-sm outline-none transition-shadow focus:ring-2 focus:ring-brand/25"
+                placeholder={isCrypto ? "T… أو 0x…" : "09xxxxxxxx"}
+                className="app-field app-code"
               />
-              <p className="px-1 pt-1 text-[11px] text-ink-muted">
+              <p className="text-micro text-ink-muted">
                 تأكد من العنوان جيداً — التحويل لا يمكن التراجع عنه.
               </p>
             </Card>
@@ -233,21 +266,16 @@ export function WithdrawTab() {
 
           {failure !== null && <ErrorLine message={failure} />}
 
-          <button
-            type="button"
+          <ActionButton
             disabled={!canSubmit || create.isPending}
+            busy={create.isPending}
             onClick={() => {
               tap();
               void submit();
             }}
-            className={cn(
-              "w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground",
-              "shadow-teller ring-1 ring-brand transition active:scale-[0.98] disabled:opacity-50",
-              create.isPending && "app-busy",
-            )}
           >
             {create.isPending ? "جارٍ الإرسال…" : "إرسال طلب السحب"}
-          </button>
+          </ActionButton>
         </>
       )}
 
@@ -270,33 +298,18 @@ export function WithdrawTab() {
             hint="كل طلب سحب يظهر هنا مع حالته حتى يصل المبلغ إلى حسابك."
           />
         ) : (
-          <div className="space-y-2">
-            {rows.map((row, index) => {
-              const { day, month } = dayMonthOf(row.requestedAt);
-              return (
-                <Card
-                  key={row.shortId}
-                  style={enterDelay(index)}
-                  className="app-enter flex items-center justify-between p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary">
-                      <span className="text-[11px] font-bold tabular-nums">{day}</span>
-                      <span className="text-[9px] text-ink-muted">{month}</span>
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium tabular-nums" dir="ltr">
-                        {formatAmount(row.amount.amount)} {row.amount.currency}
-                      </div>
-                      <div className="text-[11px] text-ink-muted">
-                        {row.methodName} · {timeOf(row.requestedAt)} · {row.shortId}
-                      </div>
-                    </div>
-                  </div>
-                  <StatusChip status={chipOf(row.status)} />
-                </Card>
-              );
-            })}
+          <div className="space-y-2.5">
+            {rows.map((row, index) => (
+              <OperationRow
+                key={row.shortId}
+                index={index}
+                at={row.requestedAt}
+                amount={formatAmount(row.amount.amount)}
+                currency={row.amount.currency}
+                meta={[row.methodName, timeOf(row.requestedAt), row.shortId]}
+                status={chipOf(row.status)}
+              />
+            ))}
           </div>
         )}
       </section>
