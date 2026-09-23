@@ -50,6 +50,31 @@ export const queryKeys = {
   wheel: ['wheel'] as const,
 };
 
+/**
+ * The rows out of a list answer, however it is wrapped.
+ *
+ * `api()` already unwraps the `{ data, meta }` envelope, so a paginated route arrives here as a
+ * bare array — NOT as `{ data: [...] }`. Reading `.data` off it gave `undefined`, and the screens
+ * that then called `.some()` or `.map()` on it threw, which the query surfaced as "could not
+ * complete" on the home screen while the wallet beside it loaded fine. One helper, so the three
+ * lists cannot drift apart on the point again.
+ */
+function rowsOf<T>(answer: Paginated<T> | T[]): T[] {
+  if (Array.isArray(answer)) return answer;
+  return Array.isArray(answer.data) ? answer.data : [];
+}
+
+/**
+ * MONEY ON THE WIRE IS `{ amount, currencyCode }`, A DECIMAL STRING.
+ *
+ * The API's MoneyDto takes `amount: "250000.00"` — never minor units, and never a number. Sending
+ * `{ minor }` is what "The request payload is invalid" meant: the field the server validates was
+ * simply not there. The amount stays a string the whole way, so nothing rounds it.
+ */
+function moneyBody(amount: string, currencyCode: string): { amount: string; currencyCode: string } {
+  return { amount, currencyCode };
+}
+
 /** The statuses a deposit is still moving through — the ones worth polling. */
 const OPEN_DEPOSIT: readonly DepositStatus[] = [
   'DRAFT',
@@ -86,12 +111,9 @@ export function usePaymentMethods(enabled: boolean): UseQueryResult<PaymentMetho
   return useQuery({
     queryKey: queryKeys.paymentMethods,
     queryFn: async () => {
-      const page = await api<Paginated<PaymentMethodView> | PaymentMethodView[]>(
-        '/v1/payment-methods',
+      return rowsOf(
+        await api<Paginated<PaymentMethodView> | PaymentMethodView[]>('/v1/payment-methods'),
       );
-      // The route is paginated, but a bare array is accepted so a change there cannot blank the
-      // deposit screen.
-      return Array.isArray(page) ? page : page.data;
     },
     enabled,
     staleTime: 5 * MINUTE,
@@ -102,8 +124,7 @@ export function useDeposits(enabled: boolean): UseQueryResult<DepositView[]> {
   return useQuery({
     queryKey: queryKeys.deposits,
     queryFn: async () => {
-      const page = await api<Paginated<DepositView>>('/v1/deposits?limit=20');
-      return page.data;
+      return rowsOf(await api<Paginated<DepositView> | DepositView[]>('/v1/deposits?limit=20'));
     },
     enabled,
     staleTime: 10 * SECOND,
@@ -120,8 +141,11 @@ export function useWithdrawals(enabled: boolean): UseQueryResult<PlayerWithdrawa
   return useQuery({
     queryKey: queryKeys.withdrawals,
     queryFn: async () => {
-      const page = await api<Paginated<PlayerWithdrawalView>>('/v1/withdrawals?limit=20');
-      return page.data;
+      return rowsOf(
+        await api<Paginated<PlayerWithdrawalView> | PlayerWithdrawalView[]>(
+          '/v1/withdrawals?limit=20',
+        ),
+      );
     },
     enabled,
     staleTime: 10 * SECOND,
@@ -141,8 +165,9 @@ export function useCasinoCredentials(enabled: boolean): UseQueryResult<CasinoCre
 
 export interface CreateDepositInput {
   paymentMethodId: string;
-  /** Minor units, as a decimal string — never a JS number. */
-  amountMinor: string;
+  /** The decimal the player typed, normalised — "250000.00". Never minor units, never a number. */
+  amount: string;
+  currencyCode: string;
   externalReference?: string;
   senderAccount?: string;
 }
@@ -161,7 +186,7 @@ export function useCreateDeposit(): UseMutationResult<DepositView, unknown, Crea
         idempotencyKey: newIdempotencyKey(),
         body: {
           paymentMethodId: input.paymentMethodId,
-          amount: { minor: input.amountMinor },
+          amount: moneyBody(input.amount, input.currencyCode),
           ...(input.externalReference === undefined
             ? {}
             : { externalReference: input.externalReference }),
@@ -249,7 +274,9 @@ export function useCancelDeposit(): UseMutationResult<DepositView, unknown, stri
 
 export interface CreateWithdrawalInput {
   paymentMethodId: string;
-  amountMinor: string;
+  /** The decimal the player typed, normalised. Same rule as the deposit's. */
+  amount: string;
+  currencyCode: string;
   payoutAddress: string;
 }
 
@@ -266,7 +293,7 @@ export function useCreateWithdrawal(): UseMutationResult<
         idempotencyKey: newIdempotencyKey(),
         body: {
           paymentMethodId: input.paymentMethodId,
-          amount: { minor: input.amountMinor },
+          amount: moneyBody(input.amount, input.currencyCode),
           payoutAddress: input.payoutAddress,
         },
       }),

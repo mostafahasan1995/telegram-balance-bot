@@ -23,7 +23,15 @@ import {
   useSubmitTxHash,
 } from "@/lib/api/hooks";
 import type { DepositView, PaymentMethodView } from "@/lib/api/types";
-import { dayMonthOf, formatAmount, formatWhole, scaleOf, timeOf, toMinor } from "@/lib/money";
+import {
+  dayMonthOf,
+  formatAmount,
+  formatWhole,
+  fromMinor,
+  scaleOf,
+  timeOf,
+  toMinor,
+} from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 import { Card, CopyField, ErrorLine, Loading, SectionTitle, StatusChip, chipOf } from "./primitives";
@@ -66,7 +74,13 @@ export function DepositTab() {
     if (active === null || minor === null) return;
     setFailure(null);
     try {
-      await create.mutateAsync({ paymentMethodId: active.id, amountMinor: minor });
+      // Validated as minor units above — where a comparison must be exact — and sent as the
+      // canonical decimal, which is what the API's MoneyDto takes.
+      await create.mutateAsync({
+        paymentMethodId: active.id,
+        amount: fromMinor(minor, scale),
+        currencyCode: active.currencyCode,
+      });
       setAmount("");
     } catch (cause: unknown) {
       setFailure(errorMessage(cause));
@@ -157,10 +171,15 @@ export function DepositTab() {
                   "text-[11px] tabular-nums",
                   belowMinimum || aboveMaximum ? "text-bad" : "text-ink-muted",
                 )}
-                dir="rtl"
               >
-                الحد المسموح لهذه الطريقة: {formatWhole(active?.minAmount ?? "0")} -{" "}
-                {formatWhole(active?.maxAmount ?? "0")} {active?.currencyCode ?? ""}
+                {/* The range is one Latin numeric run, so it carries its own direction. Left to
+                    the paragraph's RTL, bidi reorders it and "25,000 - 5,000,000 NSP" is drawn as
+                    "NSP 5,000,000 - 25,000" — the minimum and the maximum swapped on screen. */}
+                الحد المسموح لهذه الطريقة:{" "}
+                <span dir="ltr" className="inline-block">
+                  {formatWhole(active?.minAmount ?? "0")} – {formatWhole(active?.maxAmount ?? "0")}{" "}
+                  {active?.currencyCode ?? ""}
+                </span>
               </p>
             </Card>
           </section>

@@ -135,9 +135,15 @@ export function HomeTab({
                   </div>
                   <div className="min-w-0 space-y-0.5">
                     <div className="font-medium">{method.displayName}</div>
-                    <div className="text-[11px] tabular-nums text-ink-muted" dir="rtl">
-                      الحدود: {formatWhole(method.minAmount)} - {formatWhole(method.maxAmount)}{" "}
-                      {method.currencyCode}
+                    <div className="text-[11px] tabular-nums text-ink-muted">
+                      {/* One Latin numeric run, given its own direction: inside the RTL paragraph
+                          bidi draws "25,000 - 5,000,000 NSP" as "NSP 5,000,000 - 25,000", which
+                          reads as a minimum of five million. */}
+                      الحدود:{" "}
+                      <span dir="ltr" className="inline-block">
+                        {formatWhole(method.minAmount)} – {formatWhole(method.maxAmount)}{" "}
+                        {method.currencyCode}
+                      </span>
                     </div>
                     {method.instructions !== null && (
                       <div className="truncate text-[11px] text-ink-muted">
