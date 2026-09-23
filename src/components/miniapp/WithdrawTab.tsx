@@ -15,7 +15,15 @@ import { useMemo, useState } from "react";
 import { errorMessage } from "@/lib/api/client";
 import { useCreateWithdrawal, usePaymentMethods, useWallet, useWithdrawals } from "@/lib/api/hooks";
 import type { PaymentMethodView } from "@/lib/api/types";
-import { dayMonthOf, formatAmount, formatWhole, scaleOf, timeOf, toMinor } from "@/lib/money";
+import {
+  dayMonthOf,
+  formatAmount,
+  formatWhole,
+  fromMinor,
+  scaleOf,
+  timeOf,
+  toMinor,
+} from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 import { Card, ErrorLine, Loading, SectionTitle, StatusChip, chipOf } from "./primitives";
@@ -54,7 +62,8 @@ export function WithdrawTab() {
     try {
       await create.mutateAsync({
         paymentMethodId: active.id,
-        amountMinor: minor,
+        amount: fromMinor(minor, scale),
+        currencyCode: active.currencyCode,
         payoutAddress: address.trim(),
       });
       setAmount("");
