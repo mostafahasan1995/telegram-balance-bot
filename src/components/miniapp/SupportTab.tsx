@@ -1,12 +1,19 @@
-import { Activity, LifeBuoy, MessageCircle, Send } from "lucide-react";
+/**
+ * The one screen that is only words: a box that reaches the staff group, and two facts about what
+ * happens next.
+ *
+ * THE TWO CARDS BELOW THE BOX DO NOT NAVIGATE and are not drawn as though they do — they carry no
+ * chevron, because a control that looks tappable and answers nothing is the fastest way to make an
+ * app feel broken. They are facts, in the same card shape as the rest of the app.
+ */
+import { Activity, CheckCircle2, LifeBuoy, MessageCircle, Send } from "lucide-react";
 import { useState } from "react";
 
 import { errorMessage } from "@/lib/api/client";
 import { useSendSupportMessage } from "@/lib/api/hooks";
 import { tap } from "@/lib/api/telegram";
-import { cn } from "@/lib/utils";
 
-import { Card, ErrorLine, SectionTitle } from "./primitives";
+import { ActionButton, Card, ErrorLine, Note, Num, SectionTitle } from "./primitives";
 
 /** The backend refuses anything longer, so the box stops the player before the round trip does. */
 const MAX_MESSAGE = 3000;
@@ -32,18 +39,18 @@ export function SupportTab() {
   };
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       <section className="space-y-3">
         <SectionTitle
           action={
-            <span className="text-[11px] tabular-nums text-ink-muted">
-              {MAX_MESSAGE - message.length} حرف متبقٍ
+            <span className="whitespace-nowrap text-micro text-ink-muted">
+              <Num>{MAX_MESSAGE - message.length}</Num> حرف متبقٍ
             </span>
           }
         >
           راسل الدعم
         </SectionTitle>
-        <Card className="space-y-3 p-5">
+        <Card className="space-y-3">
           <textarea
             value={message}
             onChange={(event) => {
@@ -52,77 +59,60 @@ export function SupportTab() {
             }}
             maxLength={MAX_MESSAGE}
             rows={5}
+            aria-label="رسالتك إلى الدعم"
             placeholder="اكتب رسالتك: رقم العملية، المبلغ، وما الذي حصل."
-            className="w-full resize-none rounded-xl border border-hairline bg-secondary px-3 py-2.5 text-sm leading-relaxed outline-none transition-shadow focus:ring-2 focus:ring-brand/25"
+            className="app-field resize-none"
           />
-          <button
-            type="button"
-            onClick={() => void submit()}
+          <ActionButton
+            icon={Send}
             disabled={disabled}
-            className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm",
-              "font-medium ring-1 transition active:scale-[0.98]",
-              disabled
-                ? "bg-secondary text-ink-muted ring-hairline"
-                : "bg-brand text-brand-foreground ring-brand",
-              send.isPending && "app-busy",
-            )}
+            busy={send.isPending}
+            onClick={() => void submit()}
           >
-            <Send className="size-4" />
             {send.isPending ? "جارٍ الإرسال…" : "إرسال إلى الدعم"}
-          </button>
+          </ActionButton>
           {send.isError && <ErrorLine message={errorMessage(send.error)} />}
           {sent && (
-            <div className="app-enter rounded-2xl bg-ok-soft px-4 py-3 text-center">
-              <p className="text-[12px] leading-relaxed text-ok">
-                ✅ وصلت رسالتك إلى فريق الدعم، سيتم الرد قريباً.
-              </p>
-            </div>
+            <p className="app-enter flex items-center gap-2 rounded-xl bg-ok-soft px-3 py-2.5 text-small text-ok">
+              <CheckCircle2 className="size-4 shrink-0" />
+              وصلت رسالتك إلى فريق الدعم، سيتم الرد قريباً.
+            </p>
           )}
         </Card>
       </section>
 
       <section className="space-y-3">
-        <SectionTitle>الدعم</SectionTitle>
-        <div className="grid gap-3">
-          <Card className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <div className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand">
-                <MessageCircle className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm font-medium">محادثة مع الدعم</div>
-                <div className="text-[11px] text-ink-muted">
-                  متوسط الرد: 5 دقائق · 24/7
-                </div>
+        <SectionTitle>قنوات الدعم</SectionTitle>
+        <div className="space-y-2.5">
+          <Card className="flex items-center gap-3">
+            <span className="app-tile app-tile-brand size-11">
+              <MessageCircle className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <div className="truncate text-body font-semibold text-ink">محادثة مع الدعم</div>
+              <div className="truncate text-micro text-ink-muted">
+                متوسط الرد <Num>5</Num> دقائق · طوال أيام الأسبوع
               </div>
             </div>
-            <span className="text-ink-muted">←</span>
           </Card>
-          <Card className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <div className="grid size-10 place-items-center rounded-xl bg-secondary text-ink-muted">
-                <LifeBuoy className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm font-medium">الأسئلة الشائعة</div>
-                <div className="text-[11px] text-ink-muted">
-                  الإيداع، السحب، ربط الحساب
-                </div>
+          <Card className="flex items-center gap-3">
+            <span className="app-tile size-11">
+              <LifeBuoy className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <div className="truncate text-body font-semibold text-ink">الأسئلة الشائعة</div>
+              <div className="truncate text-micro text-ink-muted">
+                الإيداع، السحب، ربط الحساب
               </div>
             </div>
-            <span className="text-ink-muted">←</span>
           </Card>
         </div>
       </section>
 
-      <Card className="flex items-start gap-3 p-4">
-        <Activity className="mt-0.5 size-5 shrink-0 text-brand" />
-        <p className="text-[12px] leading-relaxed text-ink-muted">
-          إذا تأخر ظهور رصيدك أكثر من 30 دقيقة بعد إرسال رقم المرجع، أرسل رقم العملية إلى
-          الدعم مع صورة الإيصال.
-        </p>
-      </Card>
+      <Note icon={Activity}>
+        إذا تأخر ظهور رصيدك أكثر من <Num>30</Num> دقيقة بعد إرسال رقم المرجع، أرسل رقم العملية إلى
+        الدعم مع صورة الإيصال.
+      </Note>
     </div>
   );
 }

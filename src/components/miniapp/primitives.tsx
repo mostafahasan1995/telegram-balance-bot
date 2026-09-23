@@ -1,44 +1,174 @@
+/**
+ * The vocabulary every screen is built from.
+ *
+ * SIX SCREENS, ONE SHAPE. A card is `<Card>` — one radius, one hairline, one padding, defined once
+ * in styles.css. A button is `<ActionButton>`. A number is `<Num>`. An operation in a history list
+ * is `<OperationRow>`. Nothing below takes a `radius`, a `shadow` or a colour: a screen that wants
+ * to look different from the other five is the bug this file exists to prevent.
+ *
+ * AND EVERY NUMBER GOES THROUGH `<Num>`. A Latin run inside an Arabic sentence is reordered by bidi
+ * unless it is isolated — "25,000 – 5,000,000 NSP" is drawn as "NSP 5,000,000 – 25,000", the
+ * minimum and the maximum swapped, which is how a player reads a deposit limit of five million.
+ * That has already shipped once. `<Num>` is `dir="ltr"` plus `unicode-bidi: isolate` plus tabular
+ * figures, and it is not optional.
+ */
 import { Check, Copy, type LucideIcon } from "lucide-react";
 import { useState, type CSSProperties, type ReactNode } from "react";
 
 import { tap } from "@/lib/api/telegram";
+import { dayMonthOf } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-export function SectionTitle({
-  children,
-  action,
-}: {
-  children: ReactNode;
-  action?: ReactNode;
-}) {
+/** A screen's heading, with an optional thing on the far side of it (a refresh hint, a link). */
+export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-1">
-      <h2 className="text-xs font-semibold tracking-wide text-ink-muted">{children}</h2>
-      {action}
+    <div className="flex min-h-6 items-center justify-between gap-3">
+      <h2 className="min-w-0 truncate text-title font-semibold text-ink">{children}</h2>
+      {action !== undefined && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
 
+/**
+ * The same heading, numbered — the deposit and withdraw screens are sequences.
+ *
+ * THE DIGIT IS IN ITS OWN BOX rather than in the sentence ("1 · اختر طريقة الدفع"), because a
+ * Latin digit at the head of an Arabic line is a bidi coin toss about which end it lands on.
+ */
+export function StepTitle({ step, children }: { step: number; children: ReactNode }) {
+  return (
+    <div className="flex min-h-6 items-center gap-2.5">
+      <span
+        aria-hidden="true"
+        className="app-tile app-tile-brand size-6 text-micro font-bold tabular-nums"
+      >
+        {step}
+      </span>
+      <h2 className="min-w-0 truncate text-title font-semibold text-ink">{children}</h2>
+    </div>
+  );
+}
+
+/**
+ * The card. There is one.
+ *
+ * `flush` drops the padding for the two places that need their children to reach the edge — a list
+ * with dividers, a card with a picture behind it.
+ */
 export function Card({
+  children,
+  className,
+  style,
+  flush = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** The stagger from `enterDelay`, or a background picture's custom property. Nothing else. */
+  style?: CSSProperties;
+  flush?: boolean;
+}) {
+  return (
+    <div style={style} className={cn(flush ? "app-card-flush" : "app-card", className)}>
+      {children}
+    </div>
+  );
+}
+
+/** The one elevated surface a screen gets: the balance, the account panel. */
+export function Hero({
   children,
   className,
   style,
 }: {
   children: ReactNode;
   className?: string;
-  /** Only ever the stagger from `enterDelay` — there is no other inline style a card wants. */
   style?: CSSProperties;
 }) {
   return (
-    <div
-      style={style}
+    <section style={style} className={cn("app-hero", className)}>
+      {children}
+    </section>
+  );
+}
+
+/** Any Latin run inside Arabic: a figure, an id, a time, a currency code, a limit. */
+export function Num({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span dir="ltr" className={cn("app-num", className)}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * An amount and its unit, as one thing.
+ *
+ * THE ROW IS NOT `dir="ltr"`. Flipping the container would pull the whole group to the left edge of
+ * an otherwise right-aligned card, which is half of what "غير متناسق" meant; the figure itself
+ * carries its own direction and the unit sits beside it, where Arabic puts it.
+ */
+export function Money({
+  amount,
+  currency,
+  className,
+  unitClassName,
+  fade = false,
+}: {
+  amount: string;
+  currency: string;
+  className?: string;
+  unitClassName?: string;
+  /** For a figure that is re-read while the player watches it — the balance, and only that. */
+  fade?: boolean;
+}) {
+  return (
+    <span className={cn("flex min-w-0 items-baseline gap-1.5", className)}>
+      <Num className="min-w-0 truncate">
+        {fade ? <FadingValue value={amount} /> : amount}
+      </Num>
+      <span className={cn("shrink-0 text-small font-semibold text-ink-muted", unitClassName)}>
+        {currency}
+      </span>
+    </span>
+  );
+}
+
+/** Every button in the app. Three tones, no fourth. */
+export function ActionButton({
+  children,
+  onClick,
+  tone = "primary",
+  icon: Icon,
+  disabled = false,
+  busy = false,
+  className,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  tone?: "primary" | "secondary" | "soft";
+  icon?: LucideIcon;
+  disabled?: boolean;
+  /** Mid-request: breathes instead of spinning. Does NOT disable — the caller decides that. */
+  busy?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
       className={cn(
-        "rounded-2xl bg-card shadow-teller ring-1 ring-hairline",
+        "app-btn",
+        tone === "primary" && "app-btn-primary",
+        tone === "secondary" && "app-btn-secondary",
+        tone === "soft" && "app-btn-soft",
+        busy && "app-busy",
         className,
       )}
     >
-      {children}
-    </div>
+      {Icon !== undefined && <Icon className="size-[18px] shrink-0" />}
+      <span className="min-w-0 truncate">{children}</span>
+    </button>
   );
 }
 
@@ -66,7 +196,9 @@ export function StatusChip({ status }: { status: ChipStatus }) {
   return (
     <span
       className={cn(
-        "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+        // shrink-0: it is the short half of a flex row whose other half is a wallet address.
+        // Without it the chip is what gives way, and "قيد المراجعة" wraps to three words.
+        "shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-micro font-semibold",
         tone,
         // Still with someone else. The row behind this chip is re-read every fifteen seconds, and a
         // chip that breathes says "we are watching it" without spending another line of text on it.
@@ -78,6 +210,15 @@ export function StatusChip({ status }: { status: ChipStatus }) {
   );
 }
 
+/**
+ * A value the player has to copy out: an account number, a wallet address, a login.
+ *
+ * NO FIXED WIDTH, AND IT WRAPS. This field used to clamp the value at `max-w-[210px]` inside a box
+ * that is 188px wide on a 320px screen — the 22px that put a card past the edge of the phone. A
+ * TRC20 address is 34 characters of unbreakable Latin, so it breaks anywhere (`.app-code`) and runs
+ * onto a second line rather than off the side of the screen. A player verifying an address before
+ * sending money needs to SEE it, which is also why it is not truncated.
+ */
 export function CopyField({
   label,
   value,
@@ -87,6 +228,7 @@ export function CopyField({
 }: {
   label: string;
   value: string;
+  /** A machine identifier: monospaced, LTR, breaks anywhere. False for an Arabic name. */
   mono?: boolean;
   onPanel?: boolean;
   masked?: boolean;
@@ -97,27 +239,26 @@ export function CopyField({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 rounded-xl px-3 py-2.5",
-        onPanel ? "bg-white/5 ring-1 ring-white/10" : "bg-secondary ring-1 ring-hairline",
+        "flex items-start justify-between gap-3 p-3",
+        onPanel ? "rounded-md border border-white/10 bg-white/5" : "app-inset",
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div
           className={cn(
-            "mb-0.5 text-[10px] font-medium tracking-wide",
-            onPanel ? "text-panel-foreground/50" : "text-ink-muted",
+            "mb-1 text-micro font-medium",
+            onPanel ? "text-panel-foreground/60" : "text-ink-muted",
           )}
         >
           {label}
         </div>
         <button
           type="button"
-          onClick={() => masked && setRevealed((v) => !v)}
-          dir="ltr"
+          onClick={() => masked && setRevealed((current) => !current)}
+          dir={mono ? "ltr" : undefined}
           className={cn(
-            "block max-w-[210px] truncate text-start text-[13px]",
-            "transition-opacity active:opacity-60",
-            mono && "font-mono",
+            "block w-full text-start text-small transition-opacity active:opacity-60",
+            mono ? "app-code" : "break-words",
             onPanel ? "text-panel-foreground" : "text-ink",
           )}
         >
@@ -134,14 +275,14 @@ export function CopyField({
           window.setTimeout(() => setCopied(false), 1400);
         }}
         className={cn(
-          "grid size-8 shrink-0 place-items-center rounded-lg transition active:scale-90",
+          "app-tile size-9 shrink-0 transition active:scale-90",
           onPanel
-            ? "bg-white/10 text-panel-foreground hover:bg-white/20"
-            : "bg-card text-ink-muted ring-1 ring-hairline hover:text-brand",
+            ? "bg-white/10 text-panel-foreground"
+            : "border border-hairline bg-card text-ink-muted",
         )}
       >
         {copied ? (
-          <Check className="app-value size-4 text-brand" />
+          <Check className="app-value size-4 text-brand-ink" />
         ) : (
           <Copy className="size-4" />
         )}
@@ -165,6 +306,61 @@ export function chipOf(status: string): ChipStatus {
 }
 
 /**
+ * One operation in a history list — a deposit, a withdrawal, the two the home screen shows.
+ *
+ * ONE COMPONENT FOR ALL THREE LISTS. They were three near-identical blocks of JSX, which is how
+ * two of them ended up without a `min-w-0` and pushed their cards off the screen the moment a
+ * method name and a short id shared a line.
+ */
+export function OperationRow({
+  at,
+  amount,
+  currency,
+  meta,
+  status,
+  index,
+}: {
+  /** ISO-8601, as the backend sends it. */
+  at: string;
+  amount: string;
+  currency: string;
+  /** The line under the figure. Empty parts are dropped, the rest joined with a dot. */
+  meta: readonly string[];
+  status: ChipStatus;
+  index: number;
+}) {
+  const { day, month } = dayMonthOf(at);
+  const line = meta.filter((part) => part.length > 0).join(" · ");
+
+  return (
+    <Card style={enterDelay(index)} className="app-enter flex items-center gap-3">
+      <span className="app-tile flex size-11 flex-col justify-center gap-0.5">
+        <Num className="text-micro font-bold text-ink">{day}</Num>
+        {/* Two of the twelve Arabic month names are wider than the tile. The tile stays 44px. */}
+        <span className="w-full truncate px-1 text-center text-nano leading-none">{month}</span>
+      </span>
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <Money amount={amount} currency={currency} className="text-body font-semibold text-ink" />
+        {line.length > 0 && <div className="truncate text-micro text-ink-muted">{line}</div>}
+      </div>
+      <StatusChip status={status} />
+    </Card>
+  );
+}
+
+/** A line of advice at the foot of a screen. Same shape on all three screens that have one. */
+export function Note({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <Card className="flex items-start gap-3">
+      <span className="app-tile app-tile-brand mt-0.5 size-8">
+        <Icon className="size-4" />
+      </span>
+      <p className="min-w-0 flex-1 text-small text-ink-muted">{children}</p>
+    </Card>
+  );
+}
+
+/**
  * A muted line while a query is in flight.
  *
  * STILL HERE, BUT NO LONGER THE DEFAULT. A sentence where content is about to appear is a screen
@@ -173,7 +369,7 @@ export function chipOf(status: string): ChipStatus {
  * known shape uses the skeletons below instead.
  */
 export function Loading({ label = "جارٍ التحميل…" }: { label?: string }) {
-  return <p className="px-1 py-6 text-center text-xs text-ink-muted">{label}</p>;
+  return <p className="py-6 text-center text-small text-ink-muted">{label}</p>;
 }
 
 /**
@@ -182,13 +378,7 @@ export function Loading({ label = "جارٍ التحميل…" }: { label?: stri
  * SIZED BY ITS CALLER, always. A skeleton whose box is not the box of the real thing is worse than
  * no skeleton at all: the screen settles, the player starts reading, and then it moves.
  */
-export function Skeleton({
-  className,
-  onPanel = false,
-}: {
-  className?: string;
-  onPanel?: boolean;
-}) {
+export function Skeleton({ className, onPanel = false }: { className?: string; onPanel?: boolean }) {
   return (
     <div
       aria-hidden="true"
@@ -205,22 +395,22 @@ export function Skeleton({
  */
 const LOADING_ARIA = { role: "status", "aria-label": "جارٍ التحميل…" } as const;
 
-/** The home screen's balance: the figure, then the sync line under it. */
+/** The hero's balance: the figure, then the state row under it. Exactly their boxes. */
 export function BalanceSkeleton() {
   return (
-    <div {...LOADING_ARIA} className="space-y-1.5">
-      <Skeleton className="h-9 w-52 rounded-xl" />
-      <Skeleton className="h-3.5 w-36 rounded-md" />
+    <div {...LOADING_ARIA} className="space-y-3">
+      <Skeleton className="h-10 w-56 rounded-md" />
+      <Skeleton className="h-6 w-40 rounded-full" />
     </div>
   );
 }
 
-/** Payment methods as the home screen lists them — full-width rows. */
+/** Payment methods as the home screen lists them — full-width rows, 76px like every other row. */
 export function MethodRowsSkeleton({ count = 2 }: { count?: number }) {
   return (
-    <div {...LOADING_ARIA} className="grid gap-3">
+    <div {...LOADING_ARIA} className="space-y-2.5">
       {Array.from({ length: count }, (_, index) => (
-        <Skeleton key={index} className="h-20 rounded-2xl" />
+        <Skeleton key={index} className="h-[76px] rounded-xl" />
       ))}
     </div>
   );
@@ -229,20 +419,20 @@ export function MethodRowsSkeleton({ count = 2 }: { count?: number }) {
 /** Payment methods as the deposit and withdraw screens offer them — a two-column grid. */
 export function MethodCardsSkeleton({ count = 4 }: { count?: number }) {
   return (
-    <div {...LOADING_ARIA} className="grid grid-cols-2 gap-3">
+    <div {...LOADING_ARIA} className="grid grid-cols-2 gap-2.5">
       {Array.from({ length: count }, (_, index) => (
-        <Skeleton key={index} className="h-[108px] rounded-2xl" />
+        <Skeleton key={index} className="h-[116px] rounded-xl" />
       ))}
     </div>
   );
 }
 
-/** A history list: date box, two lines, a chip. Matches the 64px of a real operation card. */
+/** A history list: date tile, two lines, a chip — the 76px of a real `<OperationRow>`. */
 export function RowsSkeleton({ count = 2 }: { count?: number }) {
   return (
-    <div {...LOADING_ARIA} className="space-y-2">
+    <div {...LOADING_ARIA} className="space-y-2.5">
       {Array.from({ length: count }, (_, index) => (
-        <Skeleton key={index} className="h-16 rounded-2xl" />
+        <Skeleton key={index} className="h-[76px] rounded-xl" />
       ))}
     </div>
   );
@@ -265,14 +455,12 @@ export function EmptyState({
   hint?: string;
 }) {
   return (
-    <Card className="app-enter flex flex-col items-center gap-2 px-6 py-8 text-center">
-      <div className="grid size-11 place-items-center rounded-2xl bg-secondary text-ink-muted">
+    <Card className="app-enter flex flex-col items-center gap-2 px-5 py-8 text-center">
+      <span className="app-tile size-12 rounded-md">
         <Icon className="size-5" />
-      </div>
-      <p className="text-[13px] font-medium">{title}</p>
-      {hint !== undefined && (
-        <p className="max-w-[240px] text-[11px] leading-relaxed text-ink-muted">{hint}</p>
-      )}
+      </span>
+      <p className="text-body font-semibold text-ink">{title}</p>
+      {hint !== undefined && <p className="text-small text-ink-muted">{hint}</p>}
     </Card>
   );
 }
@@ -296,14 +484,14 @@ export function FadingValue({ value, className }: { value: string; className?: s
  * A background refetch, made visible.
  *
  * THE LISTS HERE POLL ON A TIMER. A row that changes its status on its own, with nothing on screen
- * to explain why, reads as a glitch; four grey words and a breathing dot turn it into news. It is
- * smaller than the line it sits beside, so appearing and disappearing moves nothing.
+ * to explain why, reads as a glitch; four grey words and a breathing dot turn it into news. It sits
+ * in a row with a fixed minimum height, so appearing and disappearing moves nothing.
  */
 export function Refreshing({ show }: { show: boolean }) {
   if (!show) return null;
   return (
-    <span className="app-enter inline-flex items-center gap-1.5 text-[10px] text-ink-muted">
-      <span aria-hidden="true" className="app-waiting size-1.5 rounded-full bg-brand" />
+    <span className="app-enter inline-flex items-center gap-1.5 text-micro text-ink-muted">
+      <span aria-hidden="true" className="app-waiting size-1.5 rounded-full bg-brand-ink" />
       جارٍ التحديث…
     </span>
   );
@@ -322,8 +510,8 @@ export function enterDelay(index: number): CSSProperties {
 /** What the server said, verbatim — it is already Arabic and already written for the player. */
 export function ErrorLine({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="app-enter space-y-2 rounded-2xl bg-bad-soft px-4 py-3 text-center">
-      <p className="text-[12px] leading-relaxed text-bad">{message}</p>
+    <div className="app-enter space-y-2 rounded-xl bg-bad-soft px-4 py-3 text-center">
+      <p className="text-small text-bad">{message}</p>
       {onRetry !== undefined && (
         <button
           type="button"
@@ -331,7 +519,7 @@ export function ErrorLine({ message, onRetry }: { message: string; onRetry?: () 
             tap();
             onRetry();
           }}
-          className="text-[11px] font-semibold text-bad underline underline-offset-4 transition active:scale-95"
+          className="text-micro font-semibold text-bad underline underline-offset-4"
         >
           إعادة المحاولة
         </button>

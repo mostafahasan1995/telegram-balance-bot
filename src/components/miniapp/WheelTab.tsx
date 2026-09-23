@@ -12,8 +12,9 @@
  * stops moving. A player who closes the app mid-credit finds that card already finished on return.
  */
 import { Gift } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import { figureBackground, type BrandView } from "@/components/miniapp/brand";
 import { errorMessage } from "@/lib/api/client";
 import { useSpinWheel, useWheel } from "@/lib/api/hooks";
 import { tap } from "@/lib/api/telegram";
@@ -26,7 +27,18 @@ import type {
 import { formatAmount, formatWhole, timeOf } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-import { Card, ErrorLine, Refreshing, SectionTitle, Skeleton } from "./primitives";
+import {
+  ActionButton,
+  Card,
+  ErrorLine,
+  Hero,
+  Money,
+  Note,
+  Num,
+  Refreshing,
+  SectionTitle,
+  Skeleton,
+} from "./primitives";
 
 /** The wheel is drawn in a 200×200 box, so every length below is in those units. */
 const CENTRE = 100;
@@ -41,7 +53,7 @@ const SPIN_MS = 4200;
 /** A stable empty list, so a wheel that has no segments yet does not re-render on identity. */
 const NO_SEGMENTS: readonly WheelSegmentView[] = [];
 
-export function WheelTab() {
+export function WheelTab({ brand }: { brand: BrandView }) {
   const wheel = useWheel(true);
   const spin = useSpinWheel();
 
@@ -97,14 +109,14 @@ export function WheelTab() {
   // into place under the player's thumb.
   if (wheel.isPending) {
     return (
-      <div className="space-y-7">
+      <div className="space-y-6">
         <section className="space-y-3">
           <SectionTitle>عجلة الحظ</SectionTitle>
-          <Card className="space-y-5 p-5">
+          <Hero className="space-y-4">
             <Skeleton className="mx-auto aspect-square w-full max-w-[300px] rounded-full" />
-            <Skeleton className="mx-auto h-3.5 w-48 rounded-md" />
-            <Skeleton className="h-14 rounded-2xl" />
-          </Card>
+            <Skeleton className="mx-auto h-4 w-48 rounded-md" />
+            <Skeleton className="h-12 rounded-lg" />
+          </Hero>
         </section>
       </div>
     );
@@ -113,57 +125,62 @@ export function WheelTab() {
     return <ErrorLine message={errorMessage(wheel.error)} onRetry={() => void wheel.refetch()} />;
   }
 
-  const minimum = `${formatWhole(view.minDeposit)} ${view.currencyCode}`;
+  const minimum = (
+    <Num>
+      {formatWhole(view.minDeposit)} {view.currencyCode}
+    </Num>
+  );
   const busy = spin.isPending || turning;
   const blocked = !view.canSpin || spin.isSuccess;
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       <section className="space-y-3">
         {/* The prize keeps being re-read until the casino confirms the credit; this is the only
             sign on screen that the card below is still moving. */}
         <SectionTitle action={<Refreshing show={wheel.isFetching && !wheel.isPending} />}>
           عجلة الحظ
         </SectionTitle>
-        <Card className="space-y-5 p-5">
+        {/*
+         * The one card in the app that carries a picture of its own — the operator's wheel
+         * background, behind the same scrim the page uses, painted inside the card's rounded box
+         * so nothing about the layout knows it is there. The class only goes on when there IS a
+         * picture: its layer is a scrim, and a scrim over nothing is just a card washed out.
+         */}
+        <Hero
+          className={cn("space-y-4", brand.wheelBackgroundUrl !== null && "app-figure-bg")}
+          style={figureBackground(brand.wheelBackgroundUrl)}
+        >
           <Wheel segments={segments} rotation={rotation} animate={animate} />
 
-          <p className="text-center text-[12px] leading-relaxed text-ink-muted">
-            كل إيداع مؤكد بقيمة <span className="tabular-nums">{minimum}</span> يمنحك دورة
+          <p className="text-center text-small text-ink-muted">
+            كل إيداع مؤكد بقيمة {minimum} يمنحك دورة
           </p>
 
-          <button
-            type="button"
+          <ActionButton
             disabled={blocked || busy || segments.length === 0}
+            busy={busy}
             onClick={() => void pull()}
-            className={cn(
-              "w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground",
-              "shadow-teller ring-1 ring-brand transition active:scale-[0.96] disabled:opacity-50",
-              busy && "app-busy",
-            )}
           >
             {busy ? "جارٍ الدوران…" : "أدر العجلة"}
-          </button>
+          </ActionButton>
 
           {!view.canSpin && view.reason !== null && (
-            <p className="rounded-xl bg-secondary px-3 py-2.5 text-center text-[12px] leading-relaxed text-ink-muted">
+            <p className="app-inset px-3 py-2.5 text-center text-small text-ink-muted">
               {whyNot(view.reason, minimum)}
             </p>
           )}
 
           {spin.isError && <ErrorLine message={errorMessage(spin.error)} />}
-        </Card>
+        </Hero>
       </section>
 
       {prize !== null && !turning && <Result spin={prize} />}
 
-      <Card className="flex items-start gap-3 p-4">
-        <Gift className="mt-0.5 size-5 shrink-0 text-brand" />
-        <p className="text-[12px] leading-relaxed text-ink-muted">
-          دورة واحدة لكل حملة، والنتيجة تُحسم على الخادم قبل أن تدور العجلة. تُضاف الجائزة إلى
-          رصيدك على المنصة تلقائياً، ولا حاجة لمراسلة الدعم قبل أن تستقر حالة الجائزة.
-        </p>
-      </Card>
+      <Note icon={Gift}>
+        دورة واحدة لكل حملة، والنتيجة تُحسم على الخادم قبل أن تدور العجلة. تُضاف الجائزة إلى رصيدك
+        على المنصة تلقائياً، ولا حاجة لمراسلة الدعم قبل أن تستقر حالة الجائزة.
+      </Note>
     </div>
   );
 }
@@ -177,32 +194,29 @@ function Result({ spin }: { spin: WheelSpinView }) {
       <SectionTitle>نتيجتك</SectionTitle>
       {/* The one overshoot in the app. Everywhere else this would be wrong — here the card is the
           payoff of a wheel that has just stopped, and arriving flatly would undercut it. */}
-      <Card className="app-prize space-y-4 p-5 text-center">
+      <Card className="app-prize space-y-3 text-center">
         <div className="space-y-1">
-          <p className="text-sm font-medium">{spin.prizeLabel}</p>
+          <p className="break-words text-small font-semibold text-ink">{spin.prizeLabel}</p>
           {spin.amountMinor !== "0" && (
-            <div className="flex items-baseline justify-center gap-2" dir="ltr">
-              <span className="text-3xl font-semibold tabular-nums tracking-tight">
-                {formatAmount(spin.amount)}
-              </span>
-              <span className="text-base font-medium text-brand">{spin.currencyCode}</span>
-            </div>
+            <Money
+              amount={formatAmount(spin.amount)}
+              currency={spin.currencyCode}
+              className="justify-center text-figure font-semibold text-ink"
+              unitClassName="text-small"
+            />
           )}
         </div>
 
         {/* Keyed on the wording: the status settles while the player watches, and the new note
             should fade in rather than replace the old one between two frames. */}
-        <p
-          key={note.text}
-          className={cn("app-value rounded-xl px-3 py-2 text-[12px] leading-relaxed", note.tone)}
-        >
+        <p key={note.text} className={cn("app-value rounded-md px-3 py-2 text-small", note.tone)}>
           {note.text}
         </p>
 
-        <p className="text-[11px] text-ink-muted">
-          <span className="font-mono">{spin.shortId}</span>
+        <p className="text-micro text-ink-muted">
+          <span className="app-code">{spin.shortId}</span>
           {" · "}
-          <span className="tabular-nums">{timeOf(spin.createdAt)}</span>
+          <Num>{timeOf(spin.createdAt)}</Num>
         </p>
       </Card>
     </section>
@@ -329,7 +343,13 @@ function SegmentLabel({
       textAnchor="middle"
       transform={`rotate(${round(upright)} ${x} ${y})`}
       fontSize={size}
-      className={cn("font-medium", index % 2 === 0 ? "fill-brand-foreground" : "fill-brand")}
+      className={cn(
+        "font-semibold",
+        // The odd slices are the soft tint, which is nearly the card colour — a caption in the
+        // raw brand on top of it can be a pale colour on a pale colour. `brand-ink` is the one
+        // the branding module keeps readable.
+        index % 2 === 0 ? "fill-brand-foreground" : "fill-brand-ink",
+      )}
     >
       <tspan x={x} dy={amount === null ? size * 0.35 : -size * 0.15}>
         {segment.label}
@@ -397,13 +417,19 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Why the button is dead, in the player's own language. */
-function whyNot(reason: WheelIneligibilityReason, minimum: string): string {
+/**
+ * Why the button is dead, in the player's own language.
+ *
+ * IT RETURNS NODES, NOT A TEMPLATE STRING. The minimum is a Latin run, and interpolated into an
+ * Arabic sentence with nothing isolating it bidi is free to move it to the other end of the line —
+ * "تحتاج إيداعاً مؤكداً بقيمة 25,000 NSP" is exactly the shape that bug takes.
+ */
+function whyNot(reason: WheelIneligibilityReason, minimum: ReactNode): ReactNode {
   switch (reason) {
     case "DISABLED":
       return "العجلة غير متاحة حالياً";
     case "NO_QUALIFYING_DEPOSIT":
-      return `تحتاج إيداعاً مؤكداً بقيمة ${minimum} على الأقل`;
+      return <>تحتاج إيداعاً مؤكداً بقيمة {minimum} على الأقل</>;
     case "ALREADY_SPUN":
       return "لقد استخدمت دورتك في هذه الحملة";
     case "PLAYER_NOT_ACTIVE":
@@ -432,7 +458,7 @@ function creditNote(status: WheelSpinStatus): { text: string; tone: string } {
     case "CREDITING":
       return { text: "جارٍ إضافة الجائزة إلى رصيدك…", tone: "bg-warn-soft text-warn" };
     case "CREDITED":
-      return { text: "✅ أُضيفت الجائزة إلى رصيدك", tone: "bg-ok-soft text-ok" };
+      return { text: "أُضيفت الجائزة إلى رصيدك", tone: "bg-ok-soft text-ok" };
     case "CREDIT_FAILED":
     case "NEEDS_RECONCILIATION":
       return {

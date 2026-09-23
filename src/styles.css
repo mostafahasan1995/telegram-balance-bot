@@ -16,6 +16,13 @@
  * To add a new semantic color:
  * 1. Add the variable to :root (light value) and .dark (dark value)
  * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ *
+ * THE SHAPE OF THE APP LIVES HERE AND NOWHERE ELSE — one radius scale, one
+ * hairline, one card padding, one type scale. A screen that invents its own is
+ * a bug: six screens each with their own idea of a card is exactly what "غير
+ * متناسق" means. Components reach for `.app-card`, `.app-hero`, `.app-inset`,
+ * `.app-btn*`, `.app-field` and the `text-*` scale below; they never set a
+ * radius, a shadow or a border colour by hand.
  */
 
 @theme inline {
@@ -24,6 +31,15 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-soft: var(--brand-soft);
+  /*
+   * THE BRAND AS TEXT, which is NOT the brand as a fill. An operator picks
+   * `brandColor` in the dashboard and may well pick a pale one; that colour is
+   * perfectly good behind white text and unreadable as 13px type on a white
+   * card. Every label, icon and link uses `text-brand-ink`, which the branding
+   * module darkens when the operator's colour is light. Filled surfaces keep
+   * `bg-brand` + `text-brand-foreground`.
+   */
+  --color-brand-ink: var(--brand-ink);
   --color-panel: var(--panel);
   --color-panel-foreground: var(--panel-foreground);
   --color-ink: var(--ink);
@@ -35,14 +51,51 @@
   --color-warn-soft: var(--warn-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
-  --shadow-teller: 0 1px 2px oklch(0 0 0 / 0.05);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --shadow-teller: var(--shadow-lift);
+
+  /*
+   * ONE RADIUS SCALE, smallest to largest, each step with exactly one job:
+   *   sm  10px — the icon tile inside a row
+   *   md  14px — an inset field, an input, a quick-amount chip
+   *   lg  16px — a control: every button in the app
+   *   xl  20px — a card. Every card.
+   *   2xl 24px — the one elevated surface on a screen (the balance, the panel)
+   */
+  --radius-sm: var(--r-tile);
+  --radius-md: var(--r-field);
+  --radius-lg: var(--r-control);
+  --radius-xl: var(--r-card);
+  --radius-2xl: var(--r-hero);
+  --radius-3xl: var(--r-hero);
+  --radius-4xl: var(--r-hero);
+
+  /*
+   * THE TYPE SCALE, ARABIC FIRST.
+   *
+   * Arabic needs more room between lines than Latin does — the descenders and
+   * the dots below the baseline collide at Latin's 1.5 — so body sizes run at
+   * ~1.75 and only the headings and the figures tighten up. Headings are
+   * heavier rather than bigger, which is how Arabic gets emphasis: it has no
+   * italics and letter-spacing BREAKS IT (it pulls joined letters apart), so
+   * `tracking-*` must never touch an Arabic string. Numbers get their tracking
+   * from `.app-num` instead.
+   */
+  --text-nano: 0.625rem; /* 10px — tab labels and the smallest field captions */
+  --text-nano--line-height: 1.4;
+  --text-micro: 0.6875rem; /* 11px — meta lines, ids, timestamps */
+  --text-micro--line-height: 1.55;
+  --text-small: 0.8125rem; /* 13px — secondary copy, hints */
+  --text-small--line-height: 1.7;
+  --text-body: 0.9375rem; /* 15px — primary copy, buttons, inputs */
+  --text-body--line-height: 1.75;
+  --text-title: 1.0625rem; /* 17px — section headings */
+  --text-title--line-height: 1.4;
+  --text-figure: 1.375rem; /* 22px — a money figure inside a card */
+  --text-figure--line-height: 1.2;
+  /* The hero balance. Fluid, because a 13-digit balance at a fixed 44px is a
+     number that leaves the screen — and this one is read in sunlight. */
+  --text-display: clamp(1.75rem, 8.5vw, 2.5rem);
+  --text-display--line-height: 1.05;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -80,7 +133,29 @@
 }
 
 :root {
-  --radius: 0.875rem;
+  --radius: 1.25rem;
+
+  /* Shape. Every surface in the app is one of these five. */
+  --r-tile: 0.625rem;
+  --r-field: 0.875rem;
+  --r-control: 1rem;
+  --r-card: 1.25rem;
+  --r-hero: 1.5rem;
+
+  /* Space. One card padding, one hero padding, one screen gutter. */
+  --pad-card: 1rem;
+  --pad-hero: 1.25rem;
+  --gutter: 1rem;
+
+  /*
+   * Depth, used three times and never a fourth: the hero lifts, controls lift
+   * by a hair, cards are flat and say what they are with the hairline alone.
+   */
+  --shadow-lift: 0 1px 2px oklch(0 0 0 / 0.06);
+  --shadow-hero: 0 1px 2px oklch(0 0 0 / 0.04), 0 14px 30px -18px oklch(0 0 0 / 0.28);
+  /* How much of an operator's background image survives behind the screens. */
+  --app-scrim: color-mix(in oklab, var(--background) 82%, transparent);
+
   --background: oklch(0.985 0.001 286);
   --foreground: oklch(0.21 0.006 285.9);
   --card: oklch(1 0 0);
@@ -104,17 +179,18 @@
   /* Teller design system */
   --brand: oklch(0.596 0.132 163.2);
   --brand-foreground: oklch(0.995 0 0);
+  --brand-ink: oklch(0.49 0.116 163.2);
   --brand-soft: oklch(0.955 0.03 163.2);
   --panel: oklch(0.21 0.006 285.9);
   --panel-foreground: oklch(0.967 0.001 286.4);
   --ink: oklch(0.21 0.006 285.9);
-  --ink-muted: oklch(0.552 0.014 285.9);
-  --hairline: oklch(0.92 0.004 286.3);
-  --ok: oklch(0.53 0.12 163);
+  --ink-muted: oklch(0.505 0.014 285.9);
+  --hairline: oklch(0.915 0.004 286.3);
+  --ok: oklch(0.48 0.12 163);
   --ok-soft: oklch(0.958 0.03 163);
-  --warn: oklch(0.57 0.13 71);
+  --warn: oklch(0.51 0.13 71);
   --warn-soft: oklch(0.96 0.045 88);
-  --bad: oklch(0.55 0.19 22);
+  --bad: oklch(0.52 0.19 22);
   --bad-soft: oklch(0.955 0.03 22);
 
   --chart-1: oklch(0.646 0.222 41.116);
@@ -133,6 +209,10 @@
 }
 
 .dark {
+  --shadow-lift: 0 1px 2px oklch(0 0 0 / 0.35);
+  --shadow-hero: 0 1px 2px oklch(0 0 0 / 0.4), 0 16px 34px -18px oklch(0 0 0 / 0.75);
+  --app-scrim: color-mix(in oklab, var(--background) 88%, transparent);
+
   --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.208 0.042 265.755);
@@ -168,12 +248,13 @@
 
   --brand: oklch(0.68 0.14 163.2);
   --brand-foreground: oklch(0.16 0.01 286);
+  --brand-ink: oklch(0.78 0.13 163.2);
   --brand-soft: oklch(0.3 0.05 163.2);
   --panel: oklch(0.23 0.008 286);
   --panel-foreground: oklch(0.96 0.002 286);
   --ink: oklch(0.96 0.002 286);
-  --ink-muted: oklch(0.68 0.012 286);
-  --hairline: oklch(1 0 0 / 10%);
+  --ink-muted: oklch(0.7 0.012 286);
+  --hairline: oklch(1 0 0 / 12%);
   --ok: oklch(0.72 0.13 163);
   --ok-soft: oklch(0.32 0.05 163);
   --warn: oklch(0.78 0.13 80);
@@ -182,15 +263,40 @@
   --bad-soft: oklch(0.32 0.07 22);
 }
 
-
 @layer base {
   * {
     border-color: var(--color-border);
   }
 
+  /*
+   * THE PAGE MAY NEVER SCROLL SIDEWAYS. Every horizontal overflow in this app
+   * is a bug fixed at its source — a `min-w-0` on the flex child, a `truncate`
+   * on the line, `.app-code` on the wallet address — and this is the net under
+   * all of them, so one long string a backend adds next month cannot push the
+   * cards past the edge of a 320px screen before anyone notices.
+   */
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    /* Arabic, set at a comfortable reading rhythm by default. */
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* An operator's logo is a file we did not make; it does not get to be wider
+     than the box we gave it. */
+  img,
+  svg,
+  video {
+    max-width: 100%;
   }
 
   /*
@@ -293,11 +399,222 @@
 }
 
 @layer components {
+  /* ── Surfaces ──────────────────────────────────────────────────────────
+   *
+   * Three, and there is no fourth. `.app-card` is the whole app: one radius,
+   * one hairline, one padding, no drop shadow. `.app-hero` is the single
+   * elevated surface a screen is allowed — the balance, the account panel.
+   * `.app-inset` is what sits INSIDE a card: a field, a copy row, a note.
+   */
+  .app-card,
+  .app-card-flush,
+  .app-hero {
+    border-radius: var(--r-card);
+    background-color: var(--card);
+    /* Inset, so the hairline is drawn inside the box and cannot add a pixel to
+       the layout at the edge of a 320px screen. */
+    box-shadow: inset 0 0 0 1px var(--hairline);
+  }
+
+  .app-card {
+    padding: var(--pad-card);
+  }
+
+  .app-hero {
+    border-radius: var(--r-hero);
+    padding: var(--pad-hero);
+    box-shadow:
+      inset 0 0 0 1px var(--hairline),
+      var(--shadow-hero);
+  }
+
+  .app-inset {
+    border-radius: var(--r-field);
+    background-color: var(--secondary);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+  }
+
+  /* The small square that carries an icon, a day, a monogram. */
+  .app-tile {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border-radius: var(--r-tile);
+    background-color: var(--secondary);
+    color: var(--ink-muted);
+    overflow: hidden;
+  }
+
+  .app-tile-brand {
+    background-color: var(--brand-soft);
+    color: var(--brand-ink);
+  }
+
+  /* ── Controls ──────────────────────────────────────────────────────────
+   *
+   * One button. Three tones. Nothing in the app rolls its own.
+   */
+  .app-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-width: 0;
+    border-radius: var(--r-control);
+    padding: 0.875rem 1rem;
+    font-size: 0.9375rem;
+    line-height: 1.4;
+    font-weight: 600;
+  }
+
+  .app-btn:disabled {
+    opacity: 0.5;
+  }
+
+  .app-btn:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+
+  .app-btn-primary {
+    background-color: var(--brand);
+    color: var(--brand-foreground);
+    box-shadow: var(--shadow-lift);
+  }
+
+  .app-btn-secondary {
+    background-color: var(--card);
+    color: var(--brand-ink);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklab, var(--brand) 38%, transparent),
+      var(--shadow-lift);
+  }
+
+  .app-btn-soft {
+    background-color: var(--secondary);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+  }
+
+  .app-field {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    border-radius: var(--r-field);
+    background-color: var(--secondary);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+    padding: 0.6875rem 0.875rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--ink);
+    outline: none;
+  }
+
+  .app-field::placeholder {
+    color: color-mix(in oklab, var(--ink-muted) 65%, transparent);
+  }
+
+  .app-field:focus {
+    box-shadow:
+      inset 0 0 0 1px var(--brand),
+      0 0 0 3px color-mix(in oklab, var(--brand) 22%, transparent);
+  }
+
+  /* ── Text ──────────────────────────────────────────────────────────────
+   *
+   * A NUMBER IN AN ARABIC SENTENCE IS A LATIN RUN INSIDE RTL TEXT, and bidi
+   * will reorder it if it is not isolated: "25,000 – 5,000,000 NSP" gets drawn
+   * as "NSP 5,000,000 – 25,000", which reads as a minimum of five million.
+   * That bug shipped once already. Every figure, id, timestamp and limit in
+   * this app goes through `<Num>`, which is this class plus `dir="ltr"`.
+   */
+  .app-num {
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    letter-spacing: -0.01em;
+  }
+
+  /*
+   * A machine identifier a human has to read back: a wallet address, a TXID, a
+   * login. It breaks ANYWHERE, because a 42-character TRC20 address is one
+   * unbreakable word and the card it sits in is 288px wide.
+   */
+  .app-code {
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* ── The shell ─────────────────────────────────────────────────────────── */
+
+  /* Clears the tab bar, plus whatever the phone's chin is. */
+  .app-page {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-tabbar {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /*
+   * The operator's background image, behind everything, dimmed by a scrim that
+   * is most of the page background. It is `fixed` and `z-index: -1`, so it
+   * cannot be tapped, cannot scroll, and cannot move a single pixel of layout
+   * whenever it happens to finish downloading. It fades into the flat page
+   * background at the bottom, where the tab bar is.
+   */
+  .app-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(
+        to bottom,
+        var(--app-scrim) 0%,
+        var(--app-scrim) 55%,
+        var(--background) 100%
+      ),
+      var(--app-backdrop-image, none);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  /*
+   * The same, for the one card that gets its own picture. The pseudo-element
+   * is inside the card's rounded box and behind its content but above its
+   * background, which is what `z-index: -1` inside an isolated stacking
+   * context means. Inset by a pixel so the card's hairline survives.
+   */
+  .app-figure-bg {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .app-figure-bg::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    border-radius: inherit;
+    background-image:
+      linear-gradient(var(--app-scrim), var(--app-scrim)), var(--app-figure-image, none);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
   /* The block a skeleton draws. The sweep across it is added under no-preference, below. */
   .app-skeleton {
     position: relative;
     overflow: hidden;
-    border-radius: var(--radius);
+    border-radius: var(--r-field);
     background-color: var(--secondary);
   }
 
@@ -307,6 +624,10 @@
   }
 
   @media (prefers-reduced-motion: no-preference) {
+    .app-btn {
+      transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
     /*
      * EVERY ENTER ANIMATION FILLS `backwards` AND NEVER `forwards`.
      *

@@ -197,6 +197,26 @@ export interface Paginated<T> {
 }
 
 /**
+ * `GET /v1/app/:slug/branding` — how THIS operator's app should look.
+ *
+ * Every field but the title is nullable, and the title is the operator's own display name when
+ * they set nothing, so an operator who never opens the appearance screen still has an app that
+ * looks finished. Nothing here is a secret: it is a name, a colour and three image links an
+ * operator chose to put in front of their own players, which is why the route needs no session —
+ * the app has to paint before it can sign anybody in.
+ */
+export interface Branding {
+  title: string;
+  tagline: string | null;
+  /** `#rrggbb`, or null to keep the app's own colour. Measured for contrast before it is used. */
+  brandColor: string | null;
+  logoUrl: string | null;
+  backgroundUrl: string | null;
+  wheelBackgroundUrl: string | null;
+  currencyCode: string;
+}
+
+/**
  * Where a spin's prize stands, in the backend's own names (`wheel_spin_status`).
  *
  * IT IS NOT A PAYMENT STATUS, and two of the six catch people out: `NO_PRIZE` is a segment worth

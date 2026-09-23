@@ -7,8 +7,11 @@
  * the request would be showing one it guessed. The screen is therefore two states — "open a
  * request" and "finish the open one" — and the open request is read from the server, never held in
  * component state, so closing the app mid-payment loses nothing.
+ *
+ * ONE ELEVATED SURFACE, like every other screen: whatever the player is doing right now. That is
+ * the amount box while a request is being written, and the open request once there is one.
  */
-import { ImagePlus, Landmark, ReceiptText, Wallet } from "lucide-react";
+import { CheckCircle2, ImagePlus, Landmark, ReceiptText, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { errorMessage } from "@/lib/api/client";
@@ -24,28 +27,25 @@ import {
 } from "@/lib/api/hooks";
 import { tap } from "@/lib/api/telegram";
 import type { DepositView, PaymentMethodView } from "@/lib/api/types";
-import {
-  dayMonthOf,
-  formatAmount,
-  formatWhole,
-  fromMinor,
-  scaleOf,
-  timeOf,
-  toMinor,
-} from "@/lib/money";
+import { formatAmount, formatWhole, fromMinor, scaleOf, timeOf, toMinor } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 import {
+  ActionButton,
   Card,
   CopyField,
   EmptyState,
   ErrorLine,
+  Hero,
   MethodCardsSkeleton,
+  Money,
+  Num,
+  OperationRow,
   Refreshing,
   RowsSkeleton,
   SectionTitle,
   Skeleton,
-  StatusChip,
+  StepTitle,
   chipOf,
   enterDelay,
 } from "./primitives";
@@ -79,10 +79,15 @@ export function DepositTab() {
   const scale = active === null ? 0 : scaleOf(active.minAmount);
   const minor = active === null ? null : toMinor(amount, scale);
   const belowMinimum =
-    minor !== null && active !== null && BigInt(minor) < BigInt(toMinor(active.minAmount, scale) ?? "0");
+    minor !== null &&
+    active !== null &&
+    BigInt(minor) < BigInt(toMinor(active.minAmount, scale) ?? "0");
   const aboveMaximum =
-    minor !== null && active !== null && BigInt(minor) > BigInt(toMinor(active.maxAmount, scale) ?? "0");
-  const canSubmit = active !== null && minor !== null && !belowMinimum && !aboveMaximum && BigInt(minor) > 0n;
+    minor !== null &&
+    active !== null &&
+    BigInt(minor) > BigInt(toMinor(active.maxAmount, scale) ?? "0");
+  const canSubmit =
+    active !== null && minor !== null && !belowMinimum && !aboveMaximum && BigInt(minor) > 0n;
 
   async function submit(): Promise<void> {
     if (active === null || minor === null) return;
@@ -105,90 +110,78 @@ export function DepositTab() {
   // already on the method grid by the time the answer lands.
   if (methods.isPending) {
     return (
-      <div className="space-y-7">
+      <div className="space-y-6">
         <section className="space-y-3">
-          <SectionTitle>1 · اختر طريقة الدفع</SectionTitle>
+          <StepTitle step={1}>اختر طريقة الدفع</StepTitle>
           <MethodCardsSkeleton />
         </section>
         <section className="space-y-3">
-          <SectionTitle>2 · المبلغ</SectionTitle>
-          <Skeleton className="h-[164px] rounded-2xl" />
+          <StepTitle step={2}>المبلغ</StepTitle>
+          <Skeleton className="h-[168px] rounded-2xl" />
         </section>
-        <Skeleton className="h-14 rounded-2xl" />
+        <Skeleton className="h-12 rounded-lg" />
       </div>
     );
   }
   if (methods.isError) {
-    return <ErrorLine message={errorMessage(methods.error)} onRetry={() => void methods.refetch()} />;
+    return (
+      <ErrorLine message={errorMessage(methods.error)} onRetry={() => void methods.refetch()} />
+    );
   }
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       {open !== null ? (
         <FinishPanel deposit={open} />
       ) : (
         <>
           <section className="space-y-3">
-            <SectionTitle>1 · اختر طريقة الدفع</SectionTitle>
-            <div className="grid grid-cols-2 gap-3">
-              {(methods.data ?? []).map((method, index) => {
-                const selected = method.id === active?.id;
-                return (
-                  <button
-                    key={method.id}
-                    type="button"
-                    onClick={() => {
-                      tap();
-                      setMethodId(method.id);
-                    }}
-                    style={enterDelay(index)}
-                    className={cn(
-                      "app-enter rounded-2xl p-4 text-start shadow-teller ring-1",
-                      "transition active:scale-[0.98]",
-                      selected
-                        ? "bg-brand-soft ring-brand/50"
-                        : "bg-card ring-hairline hover:ring-brand/30",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "mb-3 grid size-9 place-items-center rounded-xl transition-colors",
-                        selected
-                          ? "bg-brand text-brand-foreground"
-                          : "bg-secondary text-ink-muted",
-                      )}
-                    >
-                      {method.rail === "BANK_TRANSFER" ? (
-                        <Landmark className="size-4" />
-                      ) : (
-                        <Wallet className="size-4" />
-                      )}
-                    </div>
-                    <div className="text-sm font-medium">{method.displayName}</div>
-                    <div className="text-[10px] tabular-nums text-ink-muted" dir="ltr">
-                      {formatWhole(method.minAmount)} - {formatWhole(method.maxAmount)}
-                    </div>
-                  </button>
-                );
-              })}
+            <StepTitle step={1}>اختر طريقة الدفع</StepTitle>
+            <div className="grid grid-cols-2 gap-2.5">
+              {(methods.data ?? []).map((method, index) => (
+                <MethodCard
+                  key={method.id}
+                  method={method}
+                  index={index}
+                  selected={method.id === active?.id}
+                  onSelect={() => {
+                    tap();
+                    setMethodId(method.id);
+                  }}
+                />
+              ))}
             </div>
           </section>
 
           <section className="space-y-3">
-            <SectionTitle>2 · المبلغ</SectionTitle>
-            <Card className="space-y-4 p-5">
-              <div className="flex items-baseline gap-2 border-b border-hairline pb-3" dir="ltr">
+            <StepTitle step={2}>المبلغ</StepTitle>
+            <Hero className="space-y-4">
+              {/*
+               * THE ROW STAYS RTL AND ONLY THE INPUT IS `dir="ltr"`. The digits run left to right
+               * inside a field that still begins on the right of the card, like every other line
+               * in the app; `text-end` in an LTR box means the figure grows leftward from that
+               * starting edge, which is the calculator behaviour a money field wants. The currency
+               * labels the field from the far end — it is a form field, not the `<Money>` display
+               * pair, and a unit glued to a caret that moves is worse than a unit that stays put.
+               */}
+              <div className="flex items-baseline gap-2 border-b border-hairline pb-3">
                 <input
+                  dir="ltr"
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
                   inputMode="numeric"
-                  className="w-full bg-transparent text-3xl font-semibold tabular-nums tracking-tight outline-none placeholder:text-ink-muted/40"
+                  aria-label="المبلغ"
                   placeholder="0"
+                  className={cn(
+                    "app-num min-w-0 flex-1 bg-transparent text-end text-display font-semibold",
+                    "outline-none placeholder:text-ink-muted/50",
+                  )}
                 />
-                <span className="text-base font-medium text-brand">
+                <span className="shrink-0 text-body font-semibold text-ink-muted">
                   {active?.currencyCode ?? ""}
                 </span>
               </div>
+
               <div className="flex flex-wrap gap-2">
                 {QUICK_AMOUNTS.map((value) => (
                   <button
@@ -199,36 +192,33 @@ export function DepositTab() {
                       setAmount(value);
                     }}
                     className={cn(
-                      "rounded-full bg-secondary px-3 py-1.5 text-xs font-medium tabular-nums",
-                      "ring-1 ring-hairline transition hover:ring-brand/40",
-                      "active:scale-95 active:bg-brand-soft active:ring-brand/50",
+                      "app-inset px-3 py-1.5 text-small font-semibold text-ink",
+                      "transition active:scale-95",
                     )}
                   >
-                    +{formatWhole(value)}
+                    <Num>+{formatWhole(value)}</Num>
                   </button>
                 ))}
               </div>
+
               <p
                 className={cn(
-                  "text-[11px] tabular-nums",
+                  "text-micro",
                   belowMinimum || aboveMaximum ? "text-bad" : "text-ink-muted",
                 )}
               >
-                {/* The range is one Latin numeric run, so it carries its own direction. Left to
-                    the paragraph's RTL, bidi reorders it and "25,000 - 5,000,000 NSP" is drawn as
-                    "NSP 5,000,000 - 25,000" — the minimum and the maximum swapped on screen. */}
                 الحد المسموح لهذه الطريقة:{" "}
-                <span dir="ltr" className="inline-block">
+                <Num>
                   {formatWhole(active?.minAmount ?? "0")} – {formatWhole(active?.maxAmount ?? "0")}{" "}
                   {active?.currencyCode ?? ""}
-                </span>
+                </Num>
               </p>
-            </Card>
+            </Hero>
           </section>
 
           {active?.instructions !== null && active?.instructions !== undefined && (
-            <Card className="p-4">
-              <p className="whitespace-pre-line text-[12px] leading-relaxed text-ink-muted">
+            <Card>
+              <p className="whitespace-pre-line break-words text-small text-ink-muted">
                 {active.instructions}
               </p>
             </Card>
@@ -236,21 +226,16 @@ export function DepositTab() {
 
           {failure !== null && <ErrorLine message={failure} />}
 
-          <button
-            type="button"
+          <ActionButton
             disabled={!canSubmit || create.isPending}
+            busy={create.isPending}
             onClick={() => {
               tap();
               void submit();
             }}
-            className={cn(
-              "w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground",
-              "shadow-teller ring-1 ring-brand transition active:scale-[0.98] disabled:opacity-50",
-              create.isPending && "app-busy",
-            )}
           >
             {create.isPending ? "جارٍ الإرسال…" : "متابعة"}
-          </button>
+          </ActionButton>
         </>
       )}
 
@@ -267,38 +252,84 @@ export function DepositTab() {
             hint="كل إيداع ترسله يبقى هنا مع رقمه وحالته، حتى بعد إغلاق التطبيق."
           />
         ) : (
-          <div className="space-y-2">
-            {rows.map((deposit, index) => {
-              const { day, month } = dayMonthOf(deposit.createdAt);
-              return (
-                <Card
-                  key={deposit.shortId}
-                  style={enterDelay(index)}
-                  className="app-enter flex items-center justify-between p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary">
-                      <span className="text-[11px] font-bold tabular-nums">{day}</span>
-                      <span className="text-[9px] text-ink-muted">{month}</span>
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium tabular-nums" dir="ltr">
-                        {formatAmount(deposit.claimed.amount)} {deposit.claimed.currency}
-                      </div>
-                      <div className="text-[11px] text-ink-muted">
-                        {deposit.destination?.methodName ?? "—"} · {timeOf(deposit.createdAt)} ·{" "}
-                        {deposit.shortId}
-                      </div>
-                    </div>
-                  </div>
-                  <StatusChip status={chipOf(deposit.status)} />
-                </Card>
-              );
-            })}
+          <div className="space-y-2.5">
+            {rows.map((deposit, index) => (
+              <OperationRow
+                key={deposit.shortId}
+                index={index}
+                at={deposit.createdAt}
+                amount={formatAmount(deposit.claimed.amount)}
+                currency={deposit.claimed.currency}
+                meta={[
+                  deposit.destination?.methodName ?? "",
+                  timeOf(deposit.createdAt),
+                  deposit.shortId,
+                ]}
+                status={chipOf(deposit.status)}
+              />
+            ))}
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * One payment method in the two-column grid.
+ *
+ * FIXED HEIGHT AND `min-w-0`. A grid track is `minmax(0, 1fr)` and therefore cannot grow, but a
+ * grid ITEM defaults to `min-width: auto` and will happily overflow its track — which is how a
+ * method called "تحويل بنكي — بنك بيمو السعودي الفرنسي" used to push the whole page sideways.
+ * The height is fixed so the skeleton that stood here is the same box.
+ */
+function MethodCard({
+  method,
+  index,
+  selected,
+  onSelect,
+}: {
+  method: PaymentMethodView;
+  index: number;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      style={enterDelay(index)}
+      className={cn(
+        "app-enter flex h-[116px] min-w-0 flex-col justify-between rounded-xl p-4 text-start",
+        "transition active:scale-[0.98]",
+        selected
+          ? "bg-brand-soft outline-2 -outline-offset-2 outline-brand/60"
+          : "app-card-flush",
+      )}
+    >
+      <span
+        className={cn(
+          "app-tile size-9",
+          selected ? "bg-brand text-brand-foreground" : "bg-secondary text-ink-muted",
+        )}
+      >
+        {method.rail === "BANK_TRANSFER" ? (
+          <Landmark className="size-4" />
+        ) : (
+          <Wallet className="size-4" />
+        )}
+      </span>
+      <span className="block min-w-0 space-y-0.5">
+        <span className="block truncate text-small font-semibold text-ink">
+          {method.displayName}
+        </span>
+        <span className="block truncate text-micro text-ink-muted">
+          <Num>
+            {formatWhole(method.minAmount)} – {formatWhole(method.maxAmount)}
+          </Num>
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -321,6 +352,7 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
 
   const destination = deposit.destination;
   const isCrypto = destination?.methodCode.toLowerCase().includes("usdt") === true;
+  const referenceLabel = isCrypto ? "رقم العملية (TXID)" : "رقم العملية";
 
   async function send(): Promise<void> {
     tap();
@@ -351,31 +383,39 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
   return (
     <section className="space-y-3">
       <SectionTitle>أكمل طلبك</SectionTitle>
-      <Card className="app-enter space-y-4 p-5">
+      <Hero className="app-enter space-y-4">
         <div className="space-y-1">
-          <h3 className="text-base font-medium">
-            حوّل {formatAmount(deposit.claimed.amount)} {deposit.claimed.currency}
-          </h3>
-          <p className="text-sm text-ink-muted">
-            إلى الحساب التالي، ثم أرسل {isCrypto ? "رقم العملية (TXID)" : "رقم العملية"} هنا.
+          <div className="flex flex-wrap items-baseline gap-x-2 text-title font-semibold text-ink">
+            <span>حوّل</span>
+            <Money
+              amount={formatAmount(deposit.claimed.amount)}
+              currency={deposit.claimed.currency}
+              unitClassName="text-body text-ink-muted"
+            />
+          </div>
+          <p className="text-small text-ink-muted">
+            إلى الحساب التالي، ثم أرسل {referenceLabel} هنا.
           </p>
         </div>
 
         {destination?.accountIdentifier !== null && destination?.accountIdentifier !== undefined && (
-          <CopyField label={destination.label ?? destination.methodName} value={destination.accountIdentifier} />
+          <CopyField
+            label={destination.label ?? destination.methodName}
+            value={destination.accountIdentifier}
+          />
         )}
         {destination?.accountHolder !== null && destination?.accountHolder !== undefined && (
           <CopyField label="اسم صاحب الحساب" value={destination.accountHolder} mono={false} />
         )}
         {destination?.instructions !== null && destination?.instructions !== undefined && (
-          <p className="whitespace-pre-line text-[12px] leading-relaxed text-ink-muted">
+          <p className="whitespace-pre-line break-words text-small text-ink-muted">
             {destination.instructions}
           </p>
         )}
 
         <div className="space-y-1.5">
-          <label className="px-1 text-xs font-medium" htmlFor="deposit-reference">
-            {isCrypto ? "رقم العملية (TXID)" : "رقم العملية"}
+          <label className="block text-small font-semibold text-ink" htmlFor="deposit-reference">
+            {referenceLabel}
           </label>
           <input
             id="deposit-reference"
@@ -383,17 +423,17 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
             value={value}
             onChange={(event) => setValue(event.target.value)}
             placeholder={isCrypto ? "0x…" : "000000000"}
-            className="w-full rounded-xl border border-hairline bg-secondary px-3 py-2.5 font-mono text-sm outline-none transition-shadow focus:ring-2 focus:ring-brand/25"
+            className="app-field app-code"
           />
         </div>
 
         <div className="space-y-1.5">
-          <span className="px-1 text-xs font-medium">إيصال الدفع (اختياري)</span>
+          <span className="block text-small font-semibold text-ink">إيصال الدفع (اختياري)</span>
           <label
             className={cn(
-              "grid aspect-[4/3] w-full cursor-pointer place-items-center rounded-2xl bg-secondary",
-              "outline-1 -outline-offset-1 outline-hairline transition hover:bg-accent",
-              "active:scale-[0.99] active:outline-brand/40",
+              "grid aspect-[5/3] w-full cursor-pointer place-items-center rounded-xl",
+              "bg-secondary outline-1 -outline-offset-1 outline-hairline",
+              "transition active:scale-[0.99] active:outline-brand/40",
               proof.isPending && "app-busy",
             )}
           >
@@ -406,34 +446,32 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
                 if (file !== undefined) void attach(file);
               }}
             />
-            <div className="flex flex-col items-center gap-2">
+            <span className="flex flex-col items-center gap-2 px-4 text-center">
               <ImagePlus className="size-6 text-ink-muted" />
-              <span className="text-[10px] font-medium tracking-[0.15em] text-ink-muted">
-                {proof.isPending ? "جارٍ الرفع…" : "ارفاق صورة الإيصال"}
+              {/* No letter-spacing. It pulls joined Arabic letters apart, which is most of why
+                  this label used to look broken. */}
+              <span className="text-small font-medium text-ink-muted">
+                {proof.isPending ? "جارٍ الرفع…" : "إرفاق صورة الإيصال"}
               </span>
-            </div>
+            </span>
           </label>
         </div>
 
         {failure !== null && <ErrorLine message={failure} />}
         {sent && failure === null && (
-          <p className="app-enter rounded-xl bg-ok-soft px-3 py-2 text-center text-[12px] text-ok">
-            ✅ وصل طلبك، سيتم مراجعته خلال دقائق.
+          <p className="app-enter flex items-center gap-2 rounded-xl bg-ok-soft px-3 py-2.5 text-small text-ok">
+            <CheckCircle2 className="size-4 shrink-0" />
+            وصل طلبك، سيتم مراجعته خلال دقائق.
           </p>
         )}
 
-        <button
-          type="button"
+        <ActionButton
           disabled={value.trim().length === 0 || busy}
+          busy={busy}
           onClick={() => void send()}
-          className={cn(
-            "w-full rounded-2xl bg-brand py-3.5 text-sm font-medium text-brand-foreground",
-            "ring-1 ring-brand transition active:scale-[0.98] disabled:opacity-50",
-            busy && "app-busy",
-          )}
         >
           {busy ? "جارٍ الإرسال…" : "إرسال"}
-        </button>
+        </ActionButton>
 
         <button
           type="button"
@@ -445,11 +483,11 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
               onError: (cause: unknown) => setFailure(errorMessage(cause)),
             });
           }}
-          className="w-full text-center text-[11px] font-medium text-ink-muted underline underline-offset-4 transition active:scale-95 active:text-bad"
+          className="w-full text-center text-micro font-semibold text-ink-muted underline underline-offset-4"
         >
           إلغاء الطلب
         </button>
-      </Card>
+      </Hero>
     </section>
   );
 }

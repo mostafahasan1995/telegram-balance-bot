@@ -5,13 +5,13 @@ import { MiniApp } from "@/components/miniapp/MiniApp";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Ichancy Cashier — شحن الرصيد ومتابعة الإيداعات" },
+      { title: "الكاشير — شحن الرصيد ومتابعة الإيداعات" },
       {
         name: "description",
         content:
           "تطبيق مصغر لشحن رصيد حسابك، إرسال رقم مرجع الدفع، متابعة الإيداعات، وعرض بيانات حسابك.",
       },
-      { property: "og:title", content: "Ichancy Cashier — شحن الرصيد ومتابعة الإيداعات" },
+      { property: "og:title", content: "الكاشير — شحن الرصيد ومتابعة الإيداعات" },
       {
         property: "og:description",
         content: "اشحن رصيدك، أرسل رقم العملية، وتابع رصيدك على المنصة مباشرة من تلغرام.",
