@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { setApiBaseUrl } from './base-url';
-import { apiBaseUrl } from './runtime-config';
+import { apiBaseUrl, tenantSlug } from './runtime-config';
 import { currentPlayer, signIn, signInWithCode } from './session';
 import { initData, readyAndExpand } from './telegram';
 import type { PlayerView } from './types';
@@ -42,7 +42,16 @@ export function useSession(): SessionHandle {
     readyAndExpand();
 
     const signed = initData();
-    if (signed === null) {
+    const tenant = tenantSlug();
+    /*
+     * BOTH ARE NEEDED, and neither can be invented.
+     *
+     * Without the signed blob this is not a Telegram webview. Without the slug the server cannot
+     * tell which operator's bot token to check the signature against — the app is served at
+     * `<host>/<slug>` precisely so it can. Either one missing means the code screen, which is the
+     * honest answer: it is the one door that works from anywhere.
+     */
+    if (signed === null || tenant === null) {
       setState('needs-code');
       // Explicit: `noImplicitReturns` wants every path to say what it returns, and an effect that
       // has nothing to clean up returns undefined.
@@ -50,7 +59,7 @@ export function useSession(): SessionHandle {
     }
 
     setState('signing-in');
-    signIn(signed)
+    signIn(signed, tenant)
       .then((result) => {
         if (cancelled) return;
         setPlayer(result);

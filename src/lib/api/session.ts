@@ -97,15 +97,21 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 /**
- * Exchanges Telegram's signed initData for a session. The operator is decided by WHICH BOT signed
- * the blob, so the app never names a tenant — a client-supplied one would be a client deciding
- * whose player it is.
+ * Exchanges Telegram's signed initData for a session.
+ *
+ * THE SLUG IS A KEY SELECTOR, NOT A CLAIM. `tenant` tells the server WHICH OPERATOR'S BOT TOKEN to
+ * check the signature against — it is the `<slug>` this app is served under. It does not decide
+ * whose player the caller is: the signature does. Naming an operator whose bot did not sign the
+ * blob fails verification, so a tampered slug buys nothing.
+ *
+ * It is REQUIRED. Sending initData without it was refused, the app fell back to its code screen,
+ * and every player had to go and find a code for an app Telegram had already signed them into.
  */
-export function signIn(initData: string): Promise<PlayerView> {
+export function signIn(initData: string, tenant: string): Promise<PlayerView> {
   if (player !== null) return Promise.resolve(player);
   if (signingIn !== null) return signingIn;
 
-  signingIn = post<LoginResult>('/v1/auth/telegram', { initData })
+  signingIn = post<LoginResult>('/v1/auth/telegram', { initData, tenant })
     .then((result) => {
       store(result.tokens);
       player = result.player;
