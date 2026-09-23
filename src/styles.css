@@ -192,4 +192,206 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+
+  /*
+   * A webview is not a web page. A tap on a control must not flash the browser's grey box, and it
+   * must not sit out the 300ms the browser otherwise spends deciding whether a double tap to zoom
+   * is coming — that wait is most of what makes a mini app feel like a website.
+   */
+  button,
+  a,
+  label,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+/*
+ * Motion.
+ *
+ * EVERYTHING THAT MOVES IS OPTIONAL. Each rule that animates sits inside
+ * `prefers-reduced-motion: no-preference`, and the `reduce` block at the bottom flattens what is
+ * left — Tailwind's own `transition-*` utilities, the wheel's inline transition. A player who asked
+ * their phone for less motion gets these exact screens, standing still; a tap still changes what it
+ * touches, it just changes it at once.
+ *
+ * DURATIONS ARE 180–260ms AND EASE OUT, on purpose. This is a cashier: nothing here may come
+ * between a player and reading their balance, and nothing bouncy belongs anywhere near money — the
+ * one exception is the wheel, which is a game and says so.
+ *
+ * ONLY `transform` AND `opacity` ARE ANIMATED, so no rule below can move the layout.
+ */
+
+@keyframes app-enter-forward {
+  from {
+    opacity: 0;
+    transform: translate3d(-10px, 0, 0);
+  }
+}
+
+@keyframes app-enter-back {
+  from {
+    opacity: 0;
+    transform: translate3d(10px, 0, 0);
+  }
+}
+
+@keyframes app-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+}
+
+@keyframes app-value {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+@keyframes app-waiting {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/*
+ * The same breath for a control that is mid-request. It needs its own keyframe because those
+ * controls are disabled and therefore already at 0.5: a pulse that also dips to 0.5 would not
+ * move at all. This one only brightens, so the control stays visibly out of reach.
+ */
+@keyframes app-busy {
+  50% {
+    opacity: 0.78;
+  }
+}
+
+@keyframes app-sweep {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+@keyframes app-prize {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@layer components {
+  /* The block a skeleton draws. The sweep across it is added under no-preference, below. */
+  .app-skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius);
+    background-color: var(--secondary);
+  }
+
+  /* The same block on the dark account panel, where --secondary is the wrong side of the theme. */
+  .app-skeleton-panel {
+    background-color: color-mix(in oklab, var(--panel-foreground) 12%, transparent);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /*
+     * EVERY ENTER ANIMATION FILLS `backwards` AND NEVER `forwards`.
+     *
+     * An animation that keeps filling outranks normal declarations for as long as it fills, so a
+     * `forwards` enter would hold `transform: none` on its element for the rest of the session —
+     * and `active:scale-[0.98]` on the same button would silently do nothing. `backwards` gives
+     * the staggered rows the hidden state they need during their delay and then lets go.
+     *
+     * Forward through the bar is leftward in an RTL row, so a later tab enters from the left and
+     * an earlier one from the right: the six screens read as one strip the player is moving
+     * along, rather than six unrelated pages.
+     */
+    .app-enter-forward {
+      animation: app-enter-forward 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    }
+
+    .app-enter-back {
+      animation: app-enter-back 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    }
+
+    /* Content that has just landed from the network. List rows add their own delay inline. */
+    .app-enter {
+      animation: app-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    }
+
+    /* A number replacing another number. The shortest of the lot: it is read, not watched. */
+    .app-value {
+      animation: app-value 180ms ease-out backwards;
+    }
+
+    /* Something the server has not finished with — a pending request, a poll in flight. */
+    .app-waiting {
+      animation: app-waiting 2.2s ease-in-out infinite;
+    }
+
+    /* A control mid-request: disabled, and saying so without a spinner. */
+    .app-busy {
+      animation: app-busy 1.4s ease-in-out infinite;
+    }
+
+    .app-skeleton::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(
+        to left,
+        transparent,
+        color-mix(in oklab, var(--ink) 9%, transparent),
+        transparent
+      );
+      animation: app-sweep 1.5s ease-in-out infinite;
+    }
+
+    .app-skeleton-panel::after {
+      background-image: linear-gradient(
+        to left,
+        transparent,
+        color-mix(in oklab, var(--panel-foreground) 14%, transparent),
+        transparent
+      );
+    }
+
+    /*
+     * The tab bar's one moving part. Its width is fixed at a sixth of the bar, so a slide of its
+     * own width is exactly one tab: nothing is measured, nothing is re-laid out, and it stays
+     * correct at 320px.
+     */
+    .app-indicator {
+      transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* The wheel's prize card. The only overshoot in the app, and the only screen that earns one. */
+    .app-prize {
+      animation: app-prize 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

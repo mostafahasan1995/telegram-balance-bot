@@ -11,11 +11,11 @@ import { useState } from "react";
 
 import { errorMessage } from "@/lib/api/client";
 import { useCasinoCredentials, useMe } from "@/lib/api/hooks";
-import { openExternal } from "@/lib/api/telegram";
+import { openExternal, tap } from "@/lib/api/telegram";
 import type { PlayerStatus, PlayerView } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
-import { Card, ErrorLine, Loading, SectionTitle } from "./primitives";
+import { Card, ErrorLine, Loading, SectionTitle, Skeleton, enterDelay } from "./primitives";
 
 const STATUS_LABEL: Record<PlayerStatus, string> = {
   ACTIVE: "نشط",
@@ -61,15 +61,13 @@ export function AccountTab() {
   return (
     <div className="space-y-7">
       <section className="space-y-4 rounded-3xl bg-panel p-5 text-panel-foreground shadow-teller">
-        {me.isPending && (
-          <p className="py-6 text-center text-xs text-panel-foreground/60">جارٍ التحميل…</p>
-        )}
+        {me.isPending && <ProfileSkeleton />}
         {me.isError && (
           <ErrorLine message={errorMessage(me.error)} onRetry={() => void me.refetch()} />
         )}
         {player !== undefined && (
           <>
-            <div className="flex items-center gap-4">
+            <div className="app-enter flex items-center gap-4">
               <div className="grid size-12 shrink-0 place-items-center rounded-full bg-white/10 text-lg font-medium outline-1 -outline-offset-1 outline-white/10">
                 {initialsOf(name)}
               </div>
@@ -119,14 +117,23 @@ export function AccountTab() {
           {!revealed ? (
             <button
               type="button"
-              onClick={() => setRevealed(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-secondary py-3 text-sm font-medium ring-1 ring-hairline transition-colors hover:ring-brand/40"
+              onClick={() => {
+                tap();
+                setRevealed(true);
+              }}
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-xl bg-secondary py-3",
+                "text-sm font-medium ring-1 ring-hairline transition hover:ring-brand/40",
+                "active:scale-[0.98] active:ring-brand/40",
+              )}
             >
               <KeyRound className="size-4 text-brand" />
               إظهار بيانات الدخول
             </button>
           ) : credentials.isPending ? (
-            <Loading />
+            // A panel the player just asked to open: there is no shape to stand in for yet, and a
+            // skeleton of a password would be a strange thing to draw.
+            <Loading label="جارٍ جلب بياناتك…" />
           ) : secrets === undefined ? (
             <div className="space-y-3">
               {/* The server says "قيد التجهيز" while the casino account is still being created. */}
@@ -137,8 +144,11 @@ export function AccountTab() {
             <>
               <button
                 type="button"
-                onClick={() => openExternal(siteUrl(secrets.site))}
-                className="flex items-center gap-2 text-sm font-medium"
+                onClick={() => {
+                  tap();
+                  openExternal(siteUrl(secrets.site));
+                }}
+                className="app-enter flex items-center gap-2 text-sm font-medium transition active:scale-[0.98]"
               >
                 <KeyRound className="size-4 text-brand" />
                 {secrets.site}
@@ -159,11 +169,15 @@ export function AccountTab() {
       <section className="space-y-3">
         <SectionTitle>الشروط والأحكام</SectionTitle>
         <Card className="divide-y divide-hairline">
-          {["شروط الاستخدام", "سياسة الإيداع والسحب", "سياسة الخصوصية"].map((item) => (
+          {["شروط الاستخدام", "سياسة الإيداع والسحب", "سياسة الخصوصية"].map((item, index) => (
             <button
               key={item}
               type="button"
-              className="flex w-full items-center justify-between px-5 py-3.5 text-sm"
+              style={enterDelay(index)}
+              className={cn(
+                "app-enter flex w-full items-center justify-between px-5 py-3.5 text-sm",
+                "transition first:rounded-t-2xl last:rounded-b-2xl active:bg-secondary",
+              )}
             >
               {item}
               <span className="text-ink-muted">←</span>
@@ -175,12 +189,38 @@ export function AccountTab() {
   );
 }
 
+/**
+ * The header while `/v1/me` is in flight, drawn on the dark panel.
+ *
+ * `onPanel` ON EVERY BLOCK: the default skeleton is a light grey, which on this panel would be the
+ * brightest thing on the screen.
+ */
+function ProfileSkeleton() {
+  return (
+    <div role="status" aria-label="جارٍ التحميل…" className="flex items-center gap-4">
+      <Skeleton onPanel className="size-12 shrink-0 rounded-full" />
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <Skeleton onPanel className="h-4 w-32 rounded-md" />
+        <Skeleton onPanel className="h-3 w-24 rounded-md" />
+        <Skeleton onPanel className="h-3 w-20 rounded-md" />
+      </div>
+      <Skeleton onPanel className="h-6 w-16 shrink-0 rounded-full" />
+    </div>
+  );
+}
+
 function HideButton({ onHide }: { onHide: () => void }) {
   return (
     <button
       type="button"
-      onClick={onHide}
-      className="w-full rounded-xl bg-secondary py-2.5 text-xs font-medium text-ink-muted ring-1 ring-hairline transition-colors hover:ring-brand/40"
+      onClick={() => {
+        tap();
+        onHide();
+      }}
+      className={cn(
+        "w-full rounded-xl bg-secondary py-2.5 text-xs font-medium text-ink-muted ring-1",
+        "ring-hairline transition hover:ring-brand/40 active:scale-[0.98]",
+      )}
     >
       إخفاء
     </button>
@@ -205,6 +245,7 @@ function CopyRow({
   const [shown, setShown] = useState(!masked);
 
   const copy = async () => {
+    tap();
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
@@ -215,7 +256,13 @@ function CopyRow({
   };
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 ring-1 ring-hairline">
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 ring-1",
+        "transition-colors",
+        copied ? "ring-brand/40" : "ring-hairline",
+      )}
+    >
       <div className="min-w-0">
         <div
           className={cn(
@@ -223,13 +270,16 @@ function CopyRow({
             copied ? "text-brand" : "text-ink-muted",
           )}
         >
-          {copied ? "تم النسخ" : label}
+          {copied ? <span className="app-value inline-block">تم النسخ</span> : label}
         </div>
         <button
           type="button"
           onClick={() => masked && setShown((current) => !current)}
           dir="ltr"
-          className="block max-w-[210px] truncate text-start font-mono text-[13px] text-ink"
+          className={cn(
+            "block max-w-[210px] truncate text-start font-mono text-[13px] text-ink",
+            "transition-opacity active:opacity-60",
+          )}
         >
           {shown ? value : "••••••••••••"}
         </button>
@@ -238,9 +288,16 @@ function CopyRow({
         type="button"
         aria-label={`نسخ ${label}`}
         onClick={() => void copy()}
-        className="grid size-8 shrink-0 place-items-center rounded-lg bg-card text-ink-muted ring-1 ring-hairline transition-colors hover:text-brand"
+        className={cn(
+          "grid size-8 shrink-0 place-items-center rounded-lg bg-card text-ink-muted ring-1",
+          "ring-hairline transition hover:text-brand active:scale-90",
+        )}
       >
-        {copied ? <Check className="size-4 text-brand" /> : <Copy className="size-4" />}
+        {copied ? (
+          <Check className="app-value size-4 text-brand" />
+        ) : (
+          <Copy className="size-4" />
+        )}
       </button>
     </div>
   );

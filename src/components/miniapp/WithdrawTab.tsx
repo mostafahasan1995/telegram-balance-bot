@@ -9,11 +9,18 @@
  *    server (a TRC20 address pasted for BEP20 is money gone), so this only refuses an empty box and
  *    shows whatever the server says about the rest.
  */
-import { Landmark, Wallet } from "lucide-react";
+import { ArrowDownToLine, Landmark, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { errorMessage } from "@/lib/api/client";
-import { useCreateWithdrawal, usePaymentMethods, useWallet, useWithdrawals } from "@/lib/api/hooks";
+import {
+  isOpenWithdrawal,
+  useCreateWithdrawal,
+  usePaymentMethods,
+  useWallet,
+  useWithdrawals,
+} from "@/lib/api/hooks";
+import { tap } from "@/lib/api/telegram";
 import type { PaymentMethodView } from "@/lib/api/types";
 import {
   dayMonthOf,
@@ -26,9 +33,20 @@ import {
 } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-import { Card, ErrorLine, Loading, SectionTitle, StatusChip, chipOf } from "./primitives";
-
-const OPEN_STATUSES = ["REQUESTED", "UNDER_REVIEW", "APPROVED"];
+import {
+  Card,
+  EmptyState,
+  ErrorLine,
+  FadingValue,
+  MethodCardsSkeleton,
+  Refreshing,
+  RowsSkeleton,
+  SectionTitle,
+  Skeleton,
+  StatusChip,
+  chipOf,
+  enterDelay,
+} from "./primitives";
 
 export function WithdrawTab() {
   const methods = usePaymentMethods(true);
@@ -42,7 +60,7 @@ export function WithdrawTab() {
   const [failure, setFailure] = useState<string | null>(null);
 
   const rows = withdrawals.data ?? [];
-  const open = rows.find((row) => OPEN_STATUSES.includes(row.status)) ?? null;
+  const open = rows.find((row) => isOpenWithdrawal(row.status)) ?? null;
 
   const active = useMemo<PaymentMethodView | null>(() => {
     const list = methods.data ?? [];
@@ -73,7 +91,25 @@ export function WithdrawTab() {
     }
   }
 
-  if (methods.isPending) return <Loading />;
+  // The same three-step shape the screen is about to have, so nothing moves when it arrives.
+  if (methods.isPending) {
+    return (
+      <div className="space-y-7">
+        <section className="space-y-3">
+          <SectionTitle>1 · طريقة الاستلام</SectionTitle>
+          <MethodCardsSkeleton />
+        </section>
+        <section className="space-y-3">
+          <SectionTitle>2 · المبلغ</SectionTitle>
+          <Skeleton className="h-[124px] rounded-2xl" />
+        </section>
+        <section className="space-y-3">
+          <SectionTitle>3 · حساب الاستلام</SectionTitle>
+          <Skeleton className="h-[136px] rounded-2xl" />
+        </section>
+      </div>
+    );
+  }
   if (methods.isError) {
     return <ErrorLine message={errorMessage(methods.error)} onRetry={() => void methods.refetch()} />;
   }
@@ -82,8 +118,12 @@ export function WithdrawTab() {
     <div className="space-y-7">
       {open !== null ? (
         <section className="space-y-3">
-          <SectionTitle>طلب السحب الحالي</SectionTitle>
-          <Card className="space-y-2 p-5">
+          <SectionTitle
+            action={<Refreshing show={withdrawals.isFetching && !withdrawals.isPending} />}
+          >
+            طلب السحب الحالي
+          </SectionTitle>
+          <Card className="app-enter space-y-2 p-5">
             <div className="flex items-baseline justify-between">
               <span className="text-lg font-semibold tabular-nums" dir="ltr">
                 {formatAmount(open.amount.amount)} {open.amount.currency}
@@ -104,15 +144,20 @@ export function WithdrawTab() {
           <section className="space-y-3">
             <SectionTitle>1 · طريقة الاستلام</SectionTitle>
             <div className="grid grid-cols-2 gap-3">
-              {(methods.data ?? []).map((method) => {
+              {(methods.data ?? []).map((method, index) => {
                 const selected = method.id === active?.id;
                 return (
                   <button
                     key={method.id}
                     type="button"
-                    onClick={() => setMethodId(method.id)}
+                    onClick={() => {
+                      tap();
+                      setMethodId(method.id);
+                    }}
+                    style={enterDelay(index)}
                     className={cn(
-                      "rounded-2xl p-4 text-start shadow-teller ring-1 transition-colors",
+                      "app-enter rounded-2xl p-4 text-start shadow-teller ring-1",
+                      "transition active:scale-[0.98]",
                       selected
                         ? "bg-brand-soft ring-brand/50"
                         : "bg-card ring-hairline hover:ring-brand/30",
@@ -120,7 +165,7 @@ export function WithdrawTab() {
                   >
                     <div
                       className={cn(
-                        "mb-3 grid size-9 place-items-center rounded-xl",
+                        "mb-3 grid size-9 place-items-center rounded-xl transition-colors",
                         selected
                           ? "bg-brand text-brand-foreground"
                           : "bg-secondary text-ink-muted",
@@ -159,7 +204,8 @@ export function WithdrawTab() {
               </div>
               {balance !== null && (
                 <p className="text-[11px] tabular-nums text-ink-muted" dir="rtl">
-                  رصيدك على المنصة: {formatAmount(balance)} {wallet.data?.currency ?? ""}
+                  رصيدك على المنصة: <FadingValue value={formatAmount(balance)} />{" "}
+                  {wallet.data?.currency ?? ""}
                 </p>
               )}
             </Card>
@@ -190,8 +236,15 @@ export function WithdrawTab() {
           <button
             type="button"
             disabled={!canSubmit || create.isPending}
-            onClick={() => void submit()}
-            className="w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground shadow-teller ring-1 ring-brand transition-transform active:scale-[0.98] disabled:opacity-50"
+            onClick={() => {
+              tap();
+              void submit();
+            }}
+            className={cn(
+              "w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground",
+              "shadow-teller ring-1 ring-brand transition active:scale-[0.98] disabled:opacity-50",
+              create.isPending && "app-busy",
+            )}
           >
             {create.isPending ? "جارٍ الإرسال…" : "إرسال طلب السحب"}
           </button>
@@ -199,17 +252,33 @@ export function WithdrawTab() {
       )}
 
       <section className="space-y-3">
-        <SectionTitle>سجل السحوبات</SectionTitle>
+        <SectionTitle
+          action={
+            // Only when there is no open request above: both sections read the same query, and two
+            // identical hints on one screen look like two different things are happening.
+            <Refreshing show={open === null && withdrawals.isFetching && !withdrawals.isPending} />
+          }
+        >
+          سجل السحوبات
+        </SectionTitle>
         {withdrawals.isPending ? (
-          <Loading />
+          <RowsSkeleton count={3} />
         ) : rows.length === 0 ? (
-          <p className="px-1 py-6 text-center text-xs text-ink-muted">لا توجد سحوبات بعد.</p>
+          <EmptyState
+            icon={ArrowDownToLine}
+            title="لا توجد سحوبات بعد"
+            hint="كل طلب سحب يظهر هنا مع حالته حتى يصل المبلغ إلى حسابك."
+          />
         ) : (
           <div className="space-y-2">
-            {rows.map((row) => {
+            {rows.map((row, index) => {
               const { day, month } = dayMonthOf(row.requestedAt);
               return (
-                <Card key={row.shortId} className="flex items-center justify-between p-3">
+                <Card
+                  key={row.shortId}
+                  style={enterDelay(index)}
+                  className="app-enter flex items-center justify-between p-3"
+                >
                   <div className="flex items-center gap-3">
                     <div className="flex size-10 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary">
                       <span className="text-[11px] font-bold tabular-nums">{day}</span>

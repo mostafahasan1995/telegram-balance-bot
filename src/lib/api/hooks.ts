@@ -34,6 +34,7 @@ import type {
   SpinResultView,
   WalletView,
   WheelSpinStatus,
+  WithdrawalStatus,
 } from './types';
 
 const SECOND = 1000;
@@ -86,6 +87,13 @@ const OPEN_DEPOSIT: readonly DepositStatus[] = [
 
 export function isOpenDeposit(status: DepositStatus): boolean {
   return OPEN_DEPOSIT.includes(status);
+}
+
+/** The statuses a cash-out is still waiting on a person for — the ones worth polling. */
+const OPEN_WITHDRAWAL: readonly WithdrawalStatus[] = ['REQUESTED', 'UNDER_REVIEW', 'APPROVED'];
+
+export function isOpenWithdrawal(status: WithdrawalStatus): boolean {
+  return OPEN_WITHDRAWAL.includes(status);
 }
 
 export function useMe(enabled: boolean): UseQueryResult<MeResponse> {
@@ -149,6 +157,19 @@ export function useWithdrawals(enabled: boolean): UseQueryResult<PlayerWithdrawa
     },
     enabled,
     staleTime: 10 * SECOND,
+    /*
+     * WATCHED WHILE ONE IS OPEN, exactly like a deposit.
+     *
+     * The card pulses while a cash-out is still waiting on a person, and a pulse is a promise that
+     * the screen is watching. Without this it was not: nothing refetched, and a withdrawal that had
+     * just been paid went on breathing "under review" until the player closed the app and came
+     * back. A Telegram webview rarely fires a window focus, so focus alone cannot carry it.
+     */
+    refetchInterval: (query) => {
+      const rows = query.state.data;
+      if (rows === undefined) return false;
+      return rows.some((row) => isOpenWithdrawal(row.status)) ? 15 * SECOND : false;
+    },
   });
 }
 
@@ -282,6 +303,7 @@ export interface CreateWithdrawalInput {
 
 export function useCreateWithdrawal(): UseMutationResult<
   PlayerWithdrawalView,
+  WalletView,
   unknown,
   CreateWithdrawalInput
 > {

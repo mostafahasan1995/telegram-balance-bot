@@ -60,10 +60,12 @@ export function SupportTab() {
             onClick={() => void submit()}
             disabled={disabled}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium ring-1 transition-transform active:scale-[0.98]",
+              "flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm",
+              "font-medium ring-1 transition active:scale-[0.98]",
               disabled
                 ? "bg-secondary text-ink-muted ring-hairline"
                 : "bg-brand text-brand-foreground ring-brand",
+              send.isPending && "app-busy",
             )}
           >
             <Send className="size-4" />
@@ -71,7 +73,7 @@ export function SupportTab() {
           </button>
           {send.isError && <ErrorLine message={errorMessage(send.error)} />}
           {sent && (
-            <div className="rounded-2xl bg-ok-soft px-4 py-3 text-center">
+            <div className="app-enter rounded-2xl bg-ok-soft px-4 py-3 text-center">
               <p className="text-[12px] leading-relaxed text-ok">
                 ✅ وصلت رسالتك إلى فريق الدعم، سيتم الرد قريباً.
               </p>
