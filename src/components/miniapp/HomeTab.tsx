@@ -7,15 +7,34 @@
  * player their money is gone, so the screen says so in words and keeps the sync time beside it.
  */
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeft, ArrowUpRight, Landmark, ShieldCheck, Wallet } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Landmark,
+  ReceiptText,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
 
 import { errorMessage } from "@/lib/api/client";
 import { useDeposits, usePaymentMethods, useWallet } from "@/lib/api/hooks";
-import { tap } from "@/lib/api/telegram";
 import type { PaymentRail } from "@/lib/api/types";
 import { dayMonthOf, formatAmount, formatWhole, timeOf } from "@/lib/money";
 
-import { Card, ErrorLine, Loading, SectionTitle, StatusChip, chipOf } from "./primitives";
+import {
+  BalanceSkeleton,
+  Card,
+  EmptyState,
+  ErrorLine,
+  FadingValue,
+  MethodRowsSkeleton,
+  Refreshing,
+  RowsSkeleton,
+  SectionTitle,
+  StatusChip,
+  chipOf,
+  enterDelay,
+} from "./primitives";
 
 /** Picked from the rail, so a method the operator adds tomorrow still gets an icon. */
 function railIcon(rail: PaymentRail): LucideIcon {
@@ -26,7 +45,9 @@ export function HomeTab({
   onDeposit,
   onWithdraw,
 }: {
+  /** Switches to the deposit tab. It taps for itself — the shell's switcher owns the haptic. */
   onDeposit: () => void;
+  /** Switches to the withdraw tab. Same. */
   onWithdraw: () => void;
 }) {
   const wallet = useWallet(true);
@@ -41,10 +62,15 @@ export function HomeTab({
     <div className="space-y-7">
       <section className="space-y-4">
         <div className="space-y-1.5">
-          <span className="text-sm font-medium text-ink-muted">
-            الرصيد الحالي على المنصة
-          </span>
-          {wallet.isPending && <Loading />}
+          {/* The hint is smaller than the label it sits beside, so a poll starting or ending
+              cannot change this row's height. */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-ink-muted">
+              الرصيد الحالي على المنصة
+            </span>
+            <Refreshing show={wallet.isFetching && !wallet.isPending} />
+          </div>
+          {wallet.isPending && <BalanceSkeleton />}
           {wallet.isError && (
             <ErrorLine
               message={errorMessage(wallet.error)}
@@ -56,7 +82,9 @@ export function HomeTab({
               {funds.casino.available && funds.casino.balance !== null ? (
                 <div className="flex items-baseline gap-2" dir="ltr">
                   <h1 className="text-4xl font-semibold leading-none tracking-tight tabular-nums">
-                    {formatAmount(funds.casino.balance.amount)}
+                    {/* Re-read on focus and after every deposit: it is allowed to change while
+                        the player is looking at it, and it should not do that by snapping. */}
+                    <FadingValue value={formatAmount(funds.casino.balance.amount)} />
                   </h1>
                   <span className="text-lg font-medium text-brand">{funds.currency}</span>
                 </div>
@@ -70,9 +98,10 @@ export function HomeTab({
                 {funds.pending.count > 0 && (
                   <>
                     {" · "}بانتظار الموافقة{" "}
-                    <span className="tabular-nums">
-                      {formatWhole(funds.pending.total.amount)}
-                    </span>{" "}
+                    <FadingValue
+                      className="tabular-nums"
+                      value={formatWhole(funds.pending.total.amount)}
+                    />{" "}
                     {funds.currency}
                   </>
                 )}
@@ -84,21 +113,15 @@ export function HomeTab({
         <div className="grid gap-2">
           <button
             type="button"
-            onClick={() => {
-              tap();
-              onDeposit();
-            }}
-            className="w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground shadow-teller ring-1 ring-brand transition-transform active:scale-[0.98]"
+            onClick={onDeposit}
+            className="w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground shadow-teller ring-1 ring-brand transition active:scale-[0.98]"
           >
             شحن الرصيد
           </button>
           <button
             type="button"
-            onClick={() => {
-              tap();
-              onWithdraw();
-            }}
-            className="w-full rounded-2xl bg-card py-4 text-base font-medium text-brand shadow-teller ring-1 ring-brand/40 transition-transform hover:ring-brand active:scale-[0.98]"
+            onClick={onWithdraw}
+            className="w-full rounded-2xl bg-card py-4 text-base font-medium text-brand shadow-teller ring-1 ring-brand/40 transition hover:ring-brand active:scale-[0.98]"
           >
             سحب رصيد
           </button>
@@ -107,7 +130,7 @@ export function HomeTab({
 
       <section className="space-y-3">
         <SectionTitle>طرق الدفع المتاحة</SectionTitle>
-        {methods.isPending && <Loading />}
+        {methods.isPending && <MethodRowsSkeleton />}
         {methods.isError && (
           <ErrorLine
             message={errorMessage(methods.error)}
@@ -115,19 +138,22 @@ export function HomeTab({
           />
         )}
         {methods.isSuccess && rails.length === 0 && (
-          <p className="px-1 py-6 text-center text-xs text-ink-muted">
-            لا توجد طرق دفع متاحة حالياً.
-          </p>
+          <EmptyState
+            icon={Wallet}
+            title="لا توجد طرق دفع متاحة حالياً"
+            hint="يضيفها الكازينو من لوحة التحكم، وتظهر هنا فور تفعيلها."
+          />
         )}
         <div className="grid gap-3">
-          {rails.map((method) => {
+          {rails.map((method, index) => {
             const Icon = railIcon(method.rail);
             return (
               <button
                 key={method.id}
                 type="button"
                 onClick={onDeposit}
-                className="group flex items-center justify-between rounded-2xl bg-card p-4 text-start shadow-teller ring-1 ring-hairline transition-colors hover:ring-brand/40"
+                style={enterDelay(index)}
+                className="app-enter group flex items-center justify-between rounded-2xl bg-card p-4 text-start shadow-teller ring-1 ring-hairline transition hover:ring-brand/40 active:scale-[0.99] active:ring-brand/40"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary text-ink-muted">
@@ -162,19 +188,22 @@ export function HomeTab({
       <section className="space-y-3">
         <SectionTitle
           action={
-            <button
-              type="button"
-              onClick={onDeposit}
-              className="flex items-center gap-1 text-xs font-medium text-brand"
-            >
-              عرض الكل <ArrowUpRight className="size-3.5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <Refreshing show={deposits.isFetching && !deposits.isPending} />
+              <button
+                type="button"
+                onClick={onDeposit}
+                className="flex items-center gap-1 text-xs font-medium text-brand transition active:scale-95"
+              >
+                عرض الكل <ArrowUpRight className="size-3.5" />
+              </button>
+            </div>
           }
         >
           آخر العمليات
         </SectionTitle>
         <div className="space-y-2">
-          {deposits.isPending && <Loading />}
+          {deposits.isPending && <RowsSkeleton />}
           {deposits.isError && (
             <ErrorLine
               message={errorMessage(deposits.error)}
@@ -182,12 +211,20 @@ export function HomeTab({
             />
           )}
           {deposits.isSuccess && recent.length === 0 && (
-            <p className="px-1 py-6 text-center text-xs text-ink-muted">لا توجد عمليات بعد.</p>
+            <EmptyState
+              icon={ReceiptText}
+              title="لا توجد عمليات بعد"
+              hint="أول عملية شحن ترسلها تظهر هنا مع حالتها لحظة بلحظة."
+            />
           )}
-          {recent.map((deposit) => {
+          {recent.map((deposit, index) => {
             const { day, month } = dayMonthOf(deposit.createdAt);
             return (
-              <Card key={deposit.shortId} className="flex items-center justify-between p-3">
+              <Card
+                key={deposit.shortId}
+                style={enterDelay(index)}
+                className="app-enter flex items-center justify-between p-3"
+              >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-10 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary">
                     <span className="text-[11px] font-bold tabular-nums">{day}</span>

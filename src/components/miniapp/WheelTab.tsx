@@ -26,7 +26,7 @@ import type {
 import { formatAmount, formatWhole, timeOf } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-import { Card, ErrorLine, Loading, SectionTitle } from "./primitives";
+import { Card, ErrorLine, Refreshing, SectionTitle, Skeleton } from "./primitives";
 
 /** The wheel is drawn in a 200×200 box, so every length below is in those units. */
 const CENTRE = 100;
@@ -93,7 +93,22 @@ export function WheelTab() {
     }
   }
 
-  if (wheel.isPending) return <Loading />;
+  // A disc, a line and a button — the shape the card is about to have, so the wheel does not drop
+  // into place under the player's thumb.
+  if (wheel.isPending) {
+    return (
+      <div className="space-y-7">
+        <section className="space-y-3">
+          <SectionTitle>عجلة الحظ</SectionTitle>
+          <Card className="space-y-5 p-5">
+            <Skeleton className="mx-auto aspect-square w-full max-w-[300px] rounded-full" />
+            <Skeleton className="mx-auto h-3.5 w-48 rounded-md" />
+            <Skeleton className="h-14 rounded-2xl" />
+          </Card>
+        </section>
+      </div>
+    );
+  }
   if (wheel.isError || view === undefined) {
     return <ErrorLine message={errorMessage(wheel.error)} onRetry={() => void wheel.refetch()} />;
   }
@@ -105,7 +120,11 @@ export function WheelTab() {
   return (
     <div className="space-y-7">
       <section className="space-y-3">
-        <SectionTitle>عجلة الحظ</SectionTitle>
+        {/* The prize keeps being re-read until the casino confirms the credit; this is the only
+            sign on screen that the card below is still moving. */}
+        <SectionTitle action={<Refreshing show={wheel.isFetching && !wheel.isPending} />}>
+          عجلة الحظ
+        </SectionTitle>
         <Card className="space-y-5 p-5">
           <Wheel segments={segments} rotation={rotation} animate={animate} />
 
@@ -117,7 +136,11 @@ export function WheelTab() {
             type="button"
             disabled={blocked || busy || segments.length === 0}
             onClick={() => void pull()}
-            className="w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground shadow-teller ring-1 ring-brand transition-transform active:scale-[0.98] disabled:opacity-50"
+            className={cn(
+              "w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground",
+              "shadow-teller ring-1 ring-brand transition active:scale-[0.96] disabled:opacity-50",
+              busy && "app-busy",
+            )}
           >
             {busy ? "جارٍ الدوران…" : "أدر العجلة"}
           </button>
@@ -152,7 +175,9 @@ function Result({ spin }: { spin: WheelSpinView }) {
   return (
     <section className="space-y-3">
       <SectionTitle>نتيجتك</SectionTitle>
-      <Card className="space-y-4 p-5 text-center">
+      {/* The one overshoot in the app. Everywhere else this would be wrong — here the card is the
+          payoff of a wheel that has just stopped, and arriving flatly would undercut it. */}
+      <Card className="app-prize space-y-4 p-5 text-center">
         <div className="space-y-1">
           <p className="text-sm font-medium">{spin.prizeLabel}</p>
           {spin.amountMinor !== "0" && (
@@ -165,7 +190,12 @@ function Result({ spin }: { spin: WheelSpinView }) {
           )}
         </div>
 
-        <p className={cn("rounded-xl px-3 py-2 text-[12px] leading-relaxed", note.tone)}>
+        {/* Keyed on the wording: the status settles while the player watches, and the new note
+            should fade in rather than replace the old one between two frames. */}
+        <p
+          key={note.text}
+          className={cn("app-value rounded-xl px-3 py-2 text-[12px] leading-relaxed", note.tone)}
+        >
           {note.text}
         </p>
 

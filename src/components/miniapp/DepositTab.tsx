@@ -8,7 +8,7 @@
  * request" and "finish the open one" — and the open request is read from the server, never held in
  * component state, so closing the app mid-payment loses nothing.
  */
-import { ImagePlus, Landmark, Wallet } from "lucide-react";
+import { ImagePlus, Landmark, ReceiptText, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { errorMessage } from "@/lib/api/client";
@@ -22,6 +22,7 @@ import {
   useSubmitReference,
   useSubmitTxHash,
 } from "@/lib/api/hooks";
+import { tap } from "@/lib/api/telegram";
 import type { DepositView, PaymentMethodView } from "@/lib/api/types";
 import {
   dayMonthOf,
@@ -34,7 +35,20 @@ import {
 } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-import { Card, CopyField, ErrorLine, Loading, SectionTitle, StatusChip, chipOf } from "./primitives";
+import {
+  Card,
+  CopyField,
+  EmptyState,
+  ErrorLine,
+  MethodCardsSkeleton,
+  Refreshing,
+  RowsSkeleton,
+  SectionTitle,
+  Skeleton,
+  StatusChip,
+  chipOf,
+  enterDelay,
+} from "./primitives";
 
 /** Offered as quick taps beside the amount box, in whole currency units. */
 const QUICK_AMOUNTS = ["25000", "50000", "100000", "250000"];
@@ -87,7 +101,23 @@ export function DepositTab() {
     }
   }
 
-  if (methods.isPending) return <Loading />;
+  // Shaped like the screen that is coming, not a sentence where it will be: the player's eye is
+  // already on the method grid by the time the answer lands.
+  if (methods.isPending) {
+    return (
+      <div className="space-y-7">
+        <section className="space-y-3">
+          <SectionTitle>1 · اختر طريقة الدفع</SectionTitle>
+          <MethodCardsSkeleton />
+        </section>
+        <section className="space-y-3">
+          <SectionTitle>2 · المبلغ</SectionTitle>
+          <Skeleton className="h-[164px] rounded-2xl" />
+        </section>
+        <Skeleton className="h-14 rounded-2xl" />
+      </div>
+    );
+  }
   if (methods.isError) {
     return <ErrorLine message={errorMessage(methods.error)} onRetry={() => void methods.refetch()} />;
   }
@@ -101,15 +131,20 @@ export function DepositTab() {
           <section className="space-y-3">
             <SectionTitle>1 · اختر طريقة الدفع</SectionTitle>
             <div className="grid grid-cols-2 gap-3">
-              {(methods.data ?? []).map((method) => {
+              {(methods.data ?? []).map((method, index) => {
                 const selected = method.id === active?.id;
                 return (
                   <button
                     key={method.id}
                     type="button"
-                    onClick={() => setMethodId(method.id)}
+                    onClick={() => {
+                      tap();
+                      setMethodId(method.id);
+                    }}
+                    style={enterDelay(index)}
                     className={cn(
-                      "rounded-2xl p-4 text-start shadow-teller ring-1 transition-colors",
+                      "app-enter rounded-2xl p-4 text-start shadow-teller ring-1",
+                      "transition active:scale-[0.98]",
                       selected
                         ? "bg-brand-soft ring-brand/50"
                         : "bg-card ring-hairline hover:ring-brand/30",
@@ -117,7 +152,7 @@ export function DepositTab() {
                   >
                     <div
                       className={cn(
-                        "mb-3 grid size-9 place-items-center rounded-xl",
+                        "mb-3 grid size-9 place-items-center rounded-xl transition-colors",
                         selected
                           ? "bg-brand text-brand-foreground"
                           : "bg-secondary text-ink-muted",
@@ -159,8 +194,15 @@ export function DepositTab() {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setAmount(value)}
-                    className="rounded-full bg-secondary px-3 py-1.5 text-xs font-medium tabular-nums ring-1 ring-hairline transition-colors hover:ring-brand/40"
+                    onClick={() => {
+                      tap();
+                      setAmount(value);
+                    }}
+                    className={cn(
+                      "rounded-full bg-secondary px-3 py-1.5 text-xs font-medium tabular-nums",
+                      "ring-1 ring-hairline transition hover:ring-brand/40",
+                      "active:scale-95 active:bg-brand-soft active:ring-brand/50",
+                    )}
                   >
                     +{formatWhole(value)}
                   </button>
@@ -197,8 +239,15 @@ export function DepositTab() {
           <button
             type="button"
             disabled={!canSubmit || create.isPending}
-            onClick={() => void submit()}
-            className="w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground shadow-teller ring-1 ring-brand transition-transform active:scale-[0.98] disabled:opacity-50"
+            onClick={() => {
+              tap();
+              void submit();
+            }}
+            className={cn(
+              "w-full rounded-2xl bg-brand py-4 text-base font-medium text-brand-foreground",
+              "shadow-teller ring-1 ring-brand transition active:scale-[0.98] disabled:opacity-50",
+              create.isPending && "app-busy",
+            )}
           >
             {create.isPending ? "جارٍ الإرسال…" : "متابعة"}
           </button>
@@ -206,17 +255,27 @@ export function DepositTab() {
       )}
 
       <section className="space-y-3">
-        <SectionTitle>سجل الإيداعات</SectionTitle>
+        <SectionTitle action={<Refreshing show={deposits.isFetching && !deposits.isPending} />}>
+          سجل الإيداعات
+        </SectionTitle>
         {deposits.isPending ? (
-          <Loading />
+          <RowsSkeleton count={3} />
         ) : rows.length === 0 ? (
-          <p className="px-1 py-6 text-center text-xs text-ink-muted">لا توجد عمليات بعد.</p>
+          <EmptyState
+            icon={ReceiptText}
+            title="سجلك فارغ حتى الآن"
+            hint="كل إيداع ترسله يبقى هنا مع رقمه وحالته، حتى بعد إغلاق التطبيق."
+          />
         ) : (
           <div className="space-y-2">
-            {rows.map((deposit) => {
+            {rows.map((deposit, index) => {
               const { day, month } = dayMonthOf(deposit.createdAt);
               return (
-                <Card key={deposit.shortId} className="flex items-center justify-between p-3">
+                <Card
+                  key={deposit.shortId}
+                  style={enterDelay(index)}
+                  className="app-enter flex items-center justify-between p-3"
+                >
                   <div className="flex items-center gap-3">
                     <div className="flex size-10 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary">
                       <span className="text-[11px] font-bold tabular-nums">{day}</span>
@@ -264,6 +323,7 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
   const isCrypto = destination?.methodCode.toLowerCase().includes("usdt") === true;
 
   async function send(): Promise<void> {
+    tap();
     setFailure(null);
     try {
       if (isCrypto) await txHash.mutateAsync({ shortId: deposit.shortId, txHash: value.trim() });
@@ -291,7 +351,7 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
   return (
     <section className="space-y-3">
       <SectionTitle>أكمل طلبك</SectionTitle>
-      <Card className="space-y-4 p-5">
+      <Card className="app-enter space-y-4 p-5">
         <div className="space-y-1">
           <h3 className="text-base font-medium">
             حوّل {formatAmount(deposit.claimed.amount)} {deposit.claimed.currency}
@@ -329,7 +389,14 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
 
         <div className="space-y-1.5">
           <span className="px-1 text-xs font-medium">إيصال الدفع (اختياري)</span>
-          <label className="grid aspect-[4/3] w-full cursor-pointer place-items-center rounded-2xl bg-secondary outline-1 -outline-offset-1 outline-hairline transition-colors hover:bg-accent">
+          <label
+            className={cn(
+              "grid aspect-[4/3] w-full cursor-pointer place-items-center rounded-2xl bg-secondary",
+              "outline-1 -outline-offset-1 outline-hairline transition hover:bg-accent",
+              "active:scale-[0.99] active:outline-brand/40",
+              proof.isPending && "app-busy",
+            )}
+          >
             <input
               type="file"
               accept="image/jpeg,image/png"
@@ -350,7 +417,7 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
 
         {failure !== null && <ErrorLine message={failure} />}
         {sent && failure === null && (
-          <p className="rounded-xl bg-ok-soft px-3 py-2 text-center text-[12px] text-ok">
+          <p className="app-enter rounded-xl bg-ok-soft px-3 py-2 text-center text-[12px] text-ok">
             ✅ وصل طلبك، سيتم مراجعته خلال دقائق.
           </p>
         )}
@@ -359,7 +426,11 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
           type="button"
           disabled={value.trim().length === 0 || busy}
           onClick={() => void send()}
-          className="w-full rounded-2xl bg-brand py-3.5 text-sm font-medium text-brand-foreground ring-1 ring-brand transition-transform active:scale-[0.98] disabled:opacity-50"
+          className={cn(
+            "w-full rounded-2xl bg-brand py-3.5 text-sm font-medium text-brand-foreground",
+            "ring-1 ring-brand transition active:scale-[0.98] disabled:opacity-50",
+            busy && "app-busy",
+          )}
         >
           {busy ? "جارٍ الإرسال…" : "إرسال"}
         </button>
@@ -368,12 +439,13 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
           type="button"
           disabled={cancel.isPending}
           onClick={() => {
+            tap();
             setFailure(null);
             cancel.mutate(deposit.shortId, {
               onError: (cause: unknown) => setFailure(errorMessage(cause)),
             });
           }}
-          className="w-full text-center text-[11px] font-medium text-ink-muted underline underline-offset-4"
+          className="w-full text-center text-[11px] font-medium text-ink-muted underline underline-offset-4 transition active:scale-95 active:text-bad"
         >
           إلغاء الطلب
         </button>
