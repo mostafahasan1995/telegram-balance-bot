@@ -354,7 +354,10 @@ export function useCreateWithdrawal(): UseMutationResult<
   });
 }
 
-/** 202 and an empty body: the card reached the staff group, there is nothing to render. */
+/**
+ * 202 and an empty body: the ticket card reached the support group (or the staff group when there
+ * is none), there is nothing to render. The answer arrives later from the bot, in private.
+ */
 export function useSendSupportMessage(): UseMutationResult<void, unknown, string> {
   return useMutation({
     mutationFn: (message: string) =>

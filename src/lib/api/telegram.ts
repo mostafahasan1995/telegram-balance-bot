@@ -14,6 +14,8 @@ interface TelegramWebApp {
   themeParams?: Record<string, string>;
   HapticFeedback?: { impactOccurred?: (style: string) => void };
   openLink?: (url: string) => void;
+  /** Bot API 6.9+. Throws on an older client, or while an earlier request is still open. */
+  requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
 }
 
 declare global {
@@ -43,6 +45,42 @@ export function readyAndExpand(): void {
 /** A short tap, where the platform supports it. Never throws on a platform that does not. */
 export function tap(): void {
   webApp()?.HapticFeedback?.impactOccurred?.('light');
+}
+
+/**
+ * Asks Telegram to let the operator's bot message this player in private.
+ *
+ * WHY THE SUPPORT BOX NEEDS IT: the support team's answer is delivered by the bot, in the player's
+ * private chat with it — and a bot cannot open that chat. A player who only ever used the mini app
+ * and never pressed Start would have their question answered into the void. This shows Telegram's
+ * own permission popup (or answers at once when the bot is already allowed).
+ *
+ * Resolves `true` / `false` with the player's answer, `false` as well when they leave the popup
+ * open past `timeoutMs` (the message is sent anyway — this only decides whether to warn), and
+ * `null` when there is nothing to ask: outside Telegram, or a client too old for the method. It
+ * never rejects, so it can never be the reason a support message is not sent.
+ */
+export function requestWriteAccess(timeoutMs = 5000): Promise<boolean | null> {
+  const app = webApp();
+  if (app === null || app.requestWriteAccess === undefined) return Promise.resolve(null);
+
+  // A promise settles once, so whichever of the answer and the timeout comes first wins and the
+  // other is ignored — a late answer after the timeout changes nothing.
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      resolve(false);
+    }, timeoutMs);
+    try {
+      app.requestWriteAccess?.((granted) => {
+        clearTimeout(timer);
+        resolve(granted);
+      });
+    } catch {
+      // WebAppMethodUnsupported (older client) or a request already open: nothing to ask here.
+      clearTimeout(timer);
+      resolve(null);
+    }
+  });
 }
 
 /** Opens an external site in the host's browser rather than inside the webview. */
