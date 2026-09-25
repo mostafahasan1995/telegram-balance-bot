@@ -10,7 +10,7 @@ interface TelegramWebApp {
   initData?: string;
   ready?: () => void;
   expand?: () => void;
-  colorScheme?: 'light' | 'dark';
+  colorScheme?: "light" | "dark";
   themeParams?: Record<string, string>;
   HapticFeedback?: { impactOccurred?: (style: string) => void };
   openLink?: (url: string) => void;
@@ -25,14 +25,14 @@ declare global {
 }
 
 export function webApp(): TelegramWebApp | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
   return window.Telegram?.WebApp ?? null;
 }
 
 /** The signed blob, or null when this is not a Telegram webview (or Telegram gave us an empty one). */
 export function initData(): string | null {
   const data = webApp()?.initData;
-  return typeof data === 'string' && data.length > 0 ? data : null;
+  return typeof data === "string" && data.length > 0 ? data : null;
 }
 
 /** Tells Telegram the app has painted, and asks for the full height. Safe to call anywhere. */
@@ -44,7 +44,7 @@ export function readyAndExpand(): void {
 
 /** A short tap, where the platform supports it. Never throws on a platform that does not. */
 export function tap(): void {
-  webApp()?.HapticFeedback?.impactOccurred?.('light');
+  webApp()?.HapticFeedback?.impactOccurred?.("light");
 }
 
 /**
@@ -87,5 +87,5 @@ export function requestWriteAccess(timeoutMs = 5000): Promise<boolean | null> {
 export function openExternal(url: string): void {
   const app = webApp();
   if (app?.openLink !== undefined) app.openLink(url);
-  else if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
+  else if (typeof window !== "undefined") window.open(url, "_blank", "noopener");
 }

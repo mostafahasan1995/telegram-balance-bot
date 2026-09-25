@@ -23,12 +23,7 @@ export interface WalletMoney {
 }
 
 export type PlayerStatus =
-  | 'PENDING_ICHANCY'
-  | 'ACTIVE'
-  | 'BLOCKED'
-  | 'SUSPENDED'
-  | 'SELF_EXCLUDED'
-  | 'CLOSED';
+  "PENDING_ICHANCY" | "ACTIVE" | "BLOCKED" | "SUSPENDED" | "SELF_EXCLUDED" | "CLOSED";
 
 export interface PlayerView {
   id: string;
@@ -55,15 +50,15 @@ export interface MeResponse {
 }
 
 export type DepositStatus =
-  | 'DRAFT'
-  | 'AWAITING_PROOF'
-  | 'SUBMITTED'
-  | 'UNDER_REVIEW'
-  | 'APPROVED'
-  | 'CREDITED'
-  | 'REJECTED'
-  | 'EXPIRED'
-  | 'CANCELLED';
+  | "DRAFT"
+  | "AWAITING_PROOF"
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "APPROVED"
+  | "CREDITED"
+  | "REJECTED"
+  | "EXPIRED"
+  | "CANCELLED";
 
 export interface PendingDepositView {
   shortId: string;
@@ -92,9 +87,9 @@ export interface WalletView {
   };
 }
 
-export type PaymentRail = 'CASH_AGENT' | 'EWALLET' | 'BANK_TRANSFER' | 'CRYPTO';
+export type PaymentRail = "CASH_AGENT" | "EWALLET" | "BANK_TRANSFER" | "CRYPTO";
 
-export type RailProofField = 'reference' | 'senderAccount' | 'txHash' | 'image';
+export type RailProofField = "reference" | "senderAccount" | "txHash" | "image";
 
 export interface PaymentMethodView {
   id: string;
@@ -144,13 +139,7 @@ export interface DepositView {
 }
 
 export type WithdrawalStatus =
-  | 'REQUESTED'
-  | 'UNDER_REVIEW'
-  | 'APPROVED'
-  | 'PAID'
-  | 'REJECTED'
-  | 'CANCELLED'
-  | 'FAILED';
+  "REQUESTED" | "UNDER_REVIEW" | "APPROVED" | "PAID" | "REJECTED" | "CANCELLED" | "FAILED";
 
 export interface PlayerWithdrawalView {
   shortId: string;
@@ -226,12 +215,7 @@ export interface Branding {
  * telling the player to wait for something that is never coming.
  */
 export type WheelSpinStatus =
-  | 'NO_PRIZE'
-  | 'AWARDED'
-  | 'CREDITING'
-  | 'CREDITED'
-  | 'CREDIT_FAILED'
-  | 'NEEDS_RECONCILIATION';
+  "NO_PRIZE" | "AWARDED" | "CREDITING" | "CREDITED" | "CREDIT_FAILED" | "NEEDS_RECONCILIATION";
 
 /** A segment as a player sees it — the weights that decide the draw never leave the server. */
 export interface WheelSegmentView {
@@ -254,11 +238,7 @@ export interface WheelSpinView {
 
 /** Why a player cannot spin right now. */
 export type WheelIneligibilityReason =
-  | 'DISABLED'
-  | 'NO_QUALIFYING_DEPOSIT'
-  | 'ALREADY_SPUN'
-  | 'PLAYER_NOT_ACTIVE'
-  | 'NOT_LINKED';
+  "DISABLED" | "NO_QUALIFYING_DEPOSIT" | "ALREADY_SPUN" | "PLAYER_NOT_ACTIVE" | "NOT_LINKED";
 
 /** GET /v1/wheel */
 export interface PlayerWheelView {

@@ -113,9 +113,7 @@ export function SupportTab() {
             </span>
             <div className="min-w-0 flex-1 space-y-0.5">
               <div className="truncate text-body font-semibold text-ink">الأسئلة الشائعة</div>
-              <div className="truncate text-micro text-ink-muted">
-                الإيداع، السحب، ربط الحساب
-              </div>
+              <div className="truncate text-micro text-ink-muted">الإيداع، السحب، ربط الحساب</div>
             </div>
           </Card>
         </div>

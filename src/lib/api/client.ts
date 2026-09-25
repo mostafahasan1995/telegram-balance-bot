@@ -18,10 +18,10 @@
  *    screens loading at the same time would otherwise each rotate the token and the slower one
  *    would present a token the rotation had already killed.
  */
-import { apiUrl } from './base-url';
-import { clearSession, readSession, refreshSession } from './session';
+import { apiUrl } from "./base-url";
+import { clearSession, readSession, refreshSession } from "./session";
 
-export { apiUrl, setApiBaseUrl } from './base-url';
+export { apiUrl, setApiBaseUrl } from "./base-url";
 
 export interface ApiErrorBody {
   code: string;
@@ -36,7 +36,7 @@ export class ApiError extends Error {
 
   constructor(status: number, body: ApiErrorBody) {
     super(body.message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
     this.status = status;
     this.code = body.code;
     this.details = body.details;
@@ -44,10 +44,10 @@ export class ApiError extends Error {
 }
 
 /** Shown only when the server said nothing we can show — a dead network, a proxy's own 502 page. */
-export const GENERIC_ERROR = 'تعذّر إتمام العملية حالياً. يرجى المحاولة بعد قليل.';
+export const GENERIC_ERROR = "تعذّر إتمام العملية حالياً. يرجى المحاولة بعد قليل.";
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   /** Sent as `Idempotency-Key`; the backend replays the first answer for a repeated one. */
   idempotencyKey?: string;
@@ -60,9 +60,9 @@ async function readError(response: Response): Promise<ApiError> {
   try {
     const parsed: unknown = await response.json();
     const error = (parsed as { error?: Partial<ApiErrorBody> } | null)?.error;
-    if (error !== undefined && typeof error?.message === 'string') {
+    if (error !== undefined && typeof error?.message === "string") {
       return new ApiError(response.status, {
-        code: typeof error.code === 'string' ? error.code : 'UNKNOWN',
+        code: typeof error.code === "string" ? error.code : "UNKNOWN",
         message: error.message,
         details: error.details,
       });
@@ -70,19 +70,19 @@ async function readError(response: Response): Promise<ApiError> {
   } catch {
     // A body that is not JSON at all: an edge proxy answered, not the API.
   }
-  return new ApiError(response.status, { code: 'UNKNOWN', message: GENERIC_ERROR });
+  return new ApiError(response.status, { code: "UNKNOWN", message: GENERIC_ERROR });
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const session = readSession();
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (session !== null) headers['Authorization'] = `Bearer ${session.accessToken}`;
-  if (options.idempotencyKey !== undefined) headers['Idempotency-Key'] = options.idempotencyKey;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (session !== null) headers["Authorization"] = `Bearer ${session.accessToken}`;
+  if (options.idempotencyKey !== undefined) headers["Idempotency-Key"] = options.idempotencyKey;
 
   // Built up rather than written as one literal: `exactOptionalPropertyTypes` refuses an explicit
   // `undefined` for an optional field, and both `body` and `signal` are optional here.
-  const init: RequestInit = { method: options.method ?? 'GET', headers };
+  const init: RequestInit = { method: options.method ?? "GET", headers };
   if (options.body !== undefined) init.body = JSON.stringify(options.body);
   if (options.signal !== undefined) init.signal = options.signal;
 
@@ -91,7 +91,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     response = await fetch(apiUrl(path), init);
   } catch {
     // The request never reached the API: offline, DNS, a blocked origin.
-    throw new ApiError(0, { code: 'NETWORK', message: GENERIC_ERROR });
+    throw new ApiError(0, { code: "NETWORK", message: GENERIC_ERROR });
   }
 
   if (response.status === 401 && options.retried !== true && session !== null) {

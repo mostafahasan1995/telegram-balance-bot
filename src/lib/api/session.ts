@@ -13,10 +13,10 @@
  * WHAT IS NEVER STORED: initData itself (it is a signed blob that expires) and the casino password
  * (read on demand, held only by the component showing it).
  */
-import { apiUrl } from './base-url';
-import type { AuthTokens, LoginResult, PlayerView } from './types';
+import { apiUrl } from "./base-url";
+import type { AuthTokens, LoginResult, PlayerView } from "./types";
 
-const STORAGE_KEY = 'cashier.session.v1';
+const STORAGE_KEY = "cashier.session.v1";
 
 export interface Session {
   accessToken: string;
@@ -44,13 +44,13 @@ function restore(): Session | null {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as Partial<Session>;
-    if (typeof parsed.accessToken !== 'string' || typeof parsed.refreshToken !== 'string') {
+    if (typeof parsed.accessToken !== "string" || typeof parsed.refreshToken !== "string") {
       return null;
     }
     return {
       accessToken: parsed.accessToken,
       refreshToken: parsed.refreshToken,
-      accessTokenExpiresAt: parsed.accessTokenExpiresAt ?? '',
+      accessTokenExpiresAt: parsed.accessTokenExpiresAt ?? "",
     };
   } catch {
     return null;
@@ -58,7 +58,7 @@ function restore(): Session | null {
 }
 
 export function readSession(): Session | null {
-  if (current === null && typeof sessionStorage !== 'undefined') current = restore();
+  if (current === null && typeof sessionStorage !== "undefined") current = restore();
   return current;
 }
 
@@ -82,15 +82,15 @@ function store(tokens: AuthTokens): void {
 /** The raw fetch, not `api()`: these two routes are what MINT the credential `api()` attaches. */
 async function post<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(apiUrl(path), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
     const parsed = (await response.json().catch(() => null)) as {
       error?: { message?: string };
     } | null;
-    throw new Error(parsed?.error?.message ?? 'sign-in failed');
+    throw new Error(parsed?.error?.message ?? "sign-in failed");
   }
   const parsed: unknown = await response.json();
   return ((parsed as { data?: unknown }).data ?? parsed) as T;
@@ -111,7 +111,7 @@ export function signIn(initData: string, tenant: string): Promise<PlayerView> {
   if (player !== null) return Promise.resolve(player);
   if (signingIn !== null) return signingIn;
 
-  signingIn = post<LoginResult>('/v1/auth/telegram', { initData, tenant })
+  signingIn = post<LoginResult>("/v1/auth/telegram", { initData, tenant })
     .then((result) => {
       store(result.tokens);
       player = result.player;
@@ -125,7 +125,7 @@ export function signIn(initData: string, tenant: string): Promise<PlayerView> {
 
 /** The `/login` code path, for a client Telegram did not sign (a native app, a desktop browser). */
 export function signInWithCode(code: string): Promise<PlayerView> {
-  return post<LoginResult>('/v1/auth/bot-code', { code }).then((result) => {
+  return post<LoginResult>("/v1/auth/bot-code", { code }).then((result) => {
     store(result.tokens);
     player = result.player;
     return result.player;
@@ -138,7 +138,7 @@ export function refreshSession(): Promise<boolean> {
   if (session === null) return Promise.resolve(false);
   if (refreshing !== null) return refreshing;
 
-  refreshing = post<AuthTokens>('/v1/auth/refresh', { refreshToken: session.refreshToken })
+  refreshing = post<AuthTokens>("/v1/auth/refresh", { refreshToken: session.refreshToken })
     .then((tokens) => {
       store(tokens);
       return true;

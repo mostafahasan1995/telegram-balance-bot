@@ -19,16 +19,8 @@ import { openExternal, tap } from "@/lib/api/telegram";
 import type { PlayerStatus, PlayerView } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
-import {
-  ActionButton,
-  Card,
-  ErrorLine,
-  Loading,
-  Num,
-  SectionTitle,
-  Skeleton,
-  enterDelay,
-} from "./primitives";
+import { ActionButton, Card, ErrorLine, Loading, Num, SectionTitle, Skeleton } from "./primitives";
+import { enterDelay } from "./row-style";
 
 const STATUS_LABEL: Record<PlayerStatus, string> = {
   ACTIVE: "نشط",

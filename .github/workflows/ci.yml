@@ -55,25 +55,20 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # NON-BLOCKING, deliberately and visibly. The existing Lovable-generated code does not pass
-      # `eslint .` today: 26 problems when this step was added (20 prettier/prettier errors across
-      # 12 files, mostly shadcn ui components and the miniapp tabs, plus 6 react-refresh warnings).
-      # Reformatting generated files here would fight Lovable's own sync, so that is left to a
-      # separate change. The step still runs and its findings show on every PR; remove
-      # `continue-on-error` once `bun run lint` is clean so lint starts gating merges.
-      - name: Lint (non-blocking until the existing findings are fixed)
-        continue-on-error: true
+      # BLOCKING. `eslint .` (prettier formatting included) was brought to zero errors and zero
+      # warnings, so a new error fails the job instead of piling up. Warnings do not fail
+      # `eslint .`, but they are zero today too: fix a new one, or turn its rule off in
+      # eslint.config.js on purpose, rather than letting them accumulate.
+      - name: Lint
         run: bun run lint
 
-      # NON-BLOCKING for the same reason as lint, and equally deliberately: the Lovable-generated
-      # code does not typecheck cleanly today, so gating on it would turn CI red on changes that
-      # have nothing to do with the errors. tsconfig.json already sets `noEmit`, so the flag is
-      # only there to make the intent obvious at the call site. Runs before the build because a
-      # type error should be reported against the source, not discovered as a build failure. The
-      # step still runs and its findings show on every PR; remove `continue-on-error` once
-      # `npx tsc --noEmit` is clean so types start gating merges.
-      - name: Typecheck (non-blocking until the existing findings are fixed)
-        continue-on-error: true
+      # BLOCKING, for the same reason: the code typechecks cleanly, so a type error fails the job.
+      # tsconfig.json already sets `noEmit`; the flag only makes the intent obvious here. Runs before
+      # the build because a type error should be reported against the source, not discovered as a
+      # build failure. That order also means src/routeTree.gen.ts must be committed up to date: the
+      # router plugin only regenerates it during the build, so adding or renaming a route without
+      # committing the regenerated file fails here.
+      - name: Typecheck
         run: npx tsc --noEmit
 
       # Same build the Dockerfile runs: Node preset, vite under real Node.

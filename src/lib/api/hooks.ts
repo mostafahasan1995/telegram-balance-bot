@@ -19,10 +19,10 @@ import {
   useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
-} from '@tanstack/react-query';
+} from "@tanstack/react-query";
 
-import { api } from './client';
-import { tenantSlug } from './runtime-config';
+import { api } from "./client";
+import { tenantSlug } from "./runtime-config";
 import type {
   Branding,
   CasinoCredentials,
@@ -37,22 +37,22 @@ import type {
   WalletView,
   WheelSpinStatus,
   WithdrawalStatus,
-} from './types';
+} from "./types";
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 
 export const queryKeys = {
-  me: ['me'] as const,
-  wallet: ['wallet'] as const,
-  paymentMethods: ['payment-methods'] as const,
-  deposits: ['deposits'] as const,
-  deposit: (shortId: string) => ['deposits', shortId] as const,
-  withdrawals: ['withdrawals'] as const,
-  casinoCredentials: ['casino-credentials'] as const,
-  wheel: ['wheel'] as const,
+  me: ["me"] as const,
+  wallet: ["wallet"] as const,
+  paymentMethods: ["payment-methods"] as const,
+  deposits: ["deposits"] as const,
+  deposit: (shortId: string) => ["deposits", shortId] as const,
+  withdrawals: ["withdrawals"] as const,
+  casinoCredentials: ["casino-credentials"] as const,
+  wheel: ["wheel"] as const,
   /** Keyed by slug: one webview only ever shows one operator, but the key must say which. */
-  branding: (slug: string) => ['branding', slug] as const,
+  branding: (slug: string) => ["branding", slug] as const,
 };
 
 /**
@@ -82,11 +82,11 @@ function moneyBody(amount: string, currencyCode: string): { amount: string; curr
 
 /** The statuses a deposit is still moving through — the ones worth polling. */
 const OPEN_DEPOSIT: readonly DepositStatus[] = [
-  'DRAFT',
-  'AWAITING_PROOF',
-  'SUBMITTED',
-  'UNDER_REVIEW',
-  'APPROVED',
+  "DRAFT",
+  "AWAITING_PROOF",
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "APPROVED",
 ];
 
 export function isOpenDeposit(status: DepositStatus): boolean {
@@ -94,7 +94,7 @@ export function isOpenDeposit(status: DepositStatus): boolean {
 }
 
 /** The statuses a cash-out is still waiting on a person for — the ones worth polling. */
-const OPEN_WITHDRAWAL: readonly WithdrawalStatus[] = ['REQUESTED', 'UNDER_REVIEW', 'APPROVED'];
+const OPEN_WITHDRAWAL: readonly WithdrawalStatus[] = ["REQUESTED", "UNDER_REVIEW", "APPROVED"];
 
 export function isOpenWithdrawal(status: WithdrawalStatus): boolean {
   return OPEN_WITHDRAWAL.includes(status);
@@ -114,8 +114,8 @@ export function isOpenWithdrawal(status: WithdrawalStatus): boolean {
 export function useBranding(): UseQueryResult<Branding> {
   const tenant = tenantSlug();
   return useQuery({
-    queryKey: queryKeys.branding(tenant ?? ''),
-    queryFn: () => api<Branding>(`/v1/app/${encodeURIComponent(tenant ?? '')}/branding`),
+    queryKey: queryKeys.branding(tenant ?? ""),
+    queryFn: () => api<Branding>(`/v1/app/${encodeURIComponent(tenant ?? "")}/branding`),
     // A slug is the whole address of the thing being asked for; without one there is nothing to ask.
     enabled: tenant !== null,
     staleTime: 10 * MINUTE,
@@ -127,7 +127,7 @@ export function useBranding(): UseQueryResult<Branding> {
 export function useMe(enabled: boolean): UseQueryResult<MeResponse> {
   return useQuery({
     queryKey: queryKeys.me,
-    queryFn: () => api<MeResponse>('/v1/me'),
+    queryFn: () => api<MeResponse>("/v1/me"),
     enabled,
     staleTime: MINUTE,
   });
@@ -136,7 +136,7 @@ export function useMe(enabled: boolean): UseQueryResult<MeResponse> {
 export function useWallet(enabled: boolean): UseQueryResult<WalletView> {
   return useQuery({
     queryKey: queryKeys.wallet,
-    queryFn: () => api<WalletView>('/v1/wallet'),
+    queryFn: () => api<WalletView>("/v1/wallet"),
     enabled,
     staleTime: 15 * SECOND,
     refetchOnWindowFocus: true,
@@ -148,7 +148,7 @@ export function usePaymentMethods(enabled: boolean): UseQueryResult<PaymentMetho
     queryKey: queryKeys.paymentMethods,
     queryFn: async () => {
       return rowsOf(
-        await api<Paginated<PaymentMethodView> | PaymentMethodView[]>('/v1/payment-methods'),
+        await api<Paginated<PaymentMethodView> | PaymentMethodView[]>("/v1/payment-methods"),
       );
     },
     enabled,
@@ -160,7 +160,7 @@ export function useDeposits(enabled: boolean): UseQueryResult<DepositView[]> {
   return useQuery({
     queryKey: queryKeys.deposits,
     queryFn: async () => {
-      return rowsOf(await api<Paginated<DepositView> | DepositView[]>('/v1/deposits?limit=20'));
+      return rowsOf(await api<Paginated<DepositView> | DepositView[]>("/v1/deposits?limit=20"));
     },
     enabled,
     staleTime: 10 * SECOND,
@@ -179,7 +179,7 @@ export function useWithdrawals(enabled: boolean): UseQueryResult<PlayerWithdrawa
     queryFn: async () => {
       return rowsOf(
         await api<Paginated<PlayerWithdrawalView> | PlayerWithdrawalView[]>(
-          '/v1/withdrawals?limit=20',
+          "/v1/withdrawals?limit=20",
         ),
       );
     },
@@ -205,7 +205,7 @@ export function useWithdrawals(enabled: boolean): UseQueryResult<PlayerWithdrawa
 export function useCasinoCredentials(enabled: boolean): UseQueryResult<CasinoCredentials> {
   return useQuery({
     queryKey: queryKeys.casinoCredentials,
-    queryFn: () => api<CasinoCredentials>('/v1/me/casino-credentials'),
+    queryFn: () => api<CasinoCredentials>("/v1/me/casino-credentials"),
     enabled,
     staleTime: 5 * MINUTE,
     retry: false,
@@ -230,8 +230,8 @@ export function useCreateDeposit(): UseMutationResult<DepositView, unknown, Crea
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateDepositInput) =>
-      api<DepositView>('/v1/deposits', {
-        method: 'POST',
+      api<DepositView>("/v1/deposits", {
+        method: "POST",
         idempotencyKey: newIdempotencyKey(),
         body: {
           paymentMethodId: input.paymentMethodId,
@@ -240,7 +240,7 @@ export function useCreateDeposit(): UseMutationResult<DepositView, unknown, Crea
             ? {}
             : { externalReference: input.externalReference }),
           ...(input.senderAccount === undefined ? {} : { senderAccount: input.senderAccount }),
-          source: 'MINIAPP',
+          source: "MINIAPP",
         },
       }),
     onSuccess: () => {
@@ -259,7 +259,7 @@ export function useSubmitReference(): UseMutationResult<
   return useMutation({
     mutationFn: ({ shortId, reference }) =>
       api<DepositView>(`/v1/deposits/${shortId}/reference`, {
-        method: 'POST',
+        method: "POST",
         body: { reference },
       }),
     onSuccess: () => {
@@ -276,7 +276,7 @@ export function useSubmitTxHash(): UseMutationResult<
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ shortId, txHash }) =>
-      api<DepositView>(`/v1/deposits/${shortId}/tx-hash`, { method: 'POST', body: { txHash } }),
+      api<DepositView>(`/v1/deposits/${shortId}/tx-hash`, { method: "POST", body: { txHash } }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.deposits });
     },
@@ -296,7 +296,7 @@ export function useSubmitProof(): UseMutationResult<
   return useMutation({
     mutationFn: ({ shortId, imageBase64, mimeType, externalReference }) =>
       api<DepositView>(`/v1/deposits/${shortId}/proof`, {
-        method: 'POST',
+        method: "POST",
         body: {
           imageBase64,
           mimeType,
@@ -313,7 +313,7 @@ export function useCancelDeposit(): UseMutationResult<DepositView, unknown, stri
   const client = useQueryClient();
   return useMutation({
     mutationFn: (shortId: string) =>
-      api<DepositView>(`/v1/deposits/${shortId}/cancel`, { method: 'POST' }),
+      api<DepositView>(`/v1/deposits/${shortId}/cancel`, { method: "POST" }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.deposits });
       void client.invalidateQueries({ queryKey: queryKeys.wallet });
@@ -331,15 +331,14 @@ export interface CreateWithdrawalInput {
 
 export function useCreateWithdrawal(): UseMutationResult<
   PlayerWithdrawalView,
-  WalletView,
   unknown,
   CreateWithdrawalInput
 > {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateWithdrawalInput) =>
-      api<PlayerWithdrawalView>('/v1/withdrawals', {
-        method: 'POST',
+      api<PlayerWithdrawalView>("/v1/withdrawals", {
+        method: "POST",
         idempotencyKey: newIdempotencyKey(),
         body: {
           paymentMethodId: input.paymentMethodId,
@@ -361,12 +360,12 @@ export function useCreateWithdrawal(): UseMutationResult<
 export function useSendSupportMessage(): UseMutationResult<void, unknown, string> {
   return useMutation({
     mutationFn: (message: string) =>
-      api<void>('/v1/support/messages', { method: 'POST', body: { message } }),
+      api<void>("/v1/support/messages", { method: "POST", body: { message } }),
   });
 }
 
 /** The statuses a prize is still moving through — the only ones worth another round trip. */
-const SETTLING_SPIN: readonly WheelSpinStatus[] = ['AWARDED', 'CREDITING'];
+const SETTLING_SPIN: readonly WheelSpinStatus[] = ["AWARDED", "CREDITING"];
 
 /**
  * The wheel: its segments, whether this player may spin, and their spin once they have had it.
@@ -378,7 +377,7 @@ const SETTLING_SPIN: readonly WheelSpinStatus[] = ['AWARDED', 'CREDITING'];
 export function useWheel(enabled: boolean): UseQueryResult<PlayerWheelView> {
   return useQuery({
     queryKey: queryKeys.wheel,
-    queryFn: () => api<PlayerWheelView>('/v1/wheel'),
+    queryFn: () => api<PlayerWheelView>("/v1/wheel"),
     enabled,
     staleTime: 15 * SECOND,
     refetchInterval: (query) => {
@@ -399,7 +398,7 @@ export function useWheel(enabled: boolean): UseQueryResult<PlayerWheelView> {
 export function useSpinWheel(): UseMutationResult<SpinResultView, unknown, void> {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => api<SpinResultView>('/v1/wheel/spin', { method: 'POST' }),
+    mutationFn: () => api<SpinResultView>("/v1/wheel/spin", { method: "POST" }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.wheel });
       // A credited prize is real money on the casino side, so the balance on the home screen and

@@ -19,6 +19,8 @@ import { tap } from "@/lib/api/telegram";
 import { dayMonthOf } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
+import { enterDelay, type ChipStatus } from "./row-style";
+
 /** A screen's heading, with an optional thing on the far side of it (a refresh hint, a link). */
 export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
@@ -123,9 +125,7 @@ export function Money({
 }) {
   return (
     <span className={cn("flex min-w-0 items-baseline gap-1.5", className)}>
-      <Num className="min-w-0 truncate">
-        {fade ? <FadingValue value={amount} /> : amount}
-      </Num>
+      <Num className="min-w-0 truncate">{fade ? <FadingValue value={amount} /> : amount}</Num>
       <span className={cn("shrink-0 text-small font-semibold text-ink-muted", unitClassName)}>
         {currency}
       </span>
@@ -172,13 +172,7 @@ export function ActionButton({
   );
 }
 
-/**
- * The three colours a request can wear. Deliberately NOT the backend's status enum: a player only
- * needs "waiting", "done" or "no", and mapping the nine real statuses here would put a business
- * rule in a chip. Each screen maps its own rows with `chipOf`.
- */
-export type ChipStatus = "pending" | "approved" | "rejected";
-
+/** The words on each of the three chips; which chip a row gets is `chipOf` (row-style.ts). */
 const CHIP_LABEL: Record<ChipStatus, string> = {
   pending: "قيد المراجعة",
   approved: "مقبول",
@@ -291,20 +285,6 @@ export function CopyField({
   );
 }
 
-/** The one place that decides which colour a deposit or withdrawal wears. */
-export function chipOf(status: string): ChipStatus {
-  if (status === "CREDITED" || status === "APPROVED" || status === "PAID") return "approved";
-  if (
-    status === "REJECTED" ||
-    status === "EXPIRED" ||
-    status === "CANCELLED" ||
-    status === "FAILED"
-  ) {
-    return "rejected";
-  }
-  return "pending";
-}
-
 /**
  * One operation in a history list — a deposit, a withdrawal, the two the home screen shows.
  *
@@ -378,7 +358,13 @@ export function Loading({ label = "جارٍ التحميل…" }: { label?: stri
  * SIZED BY ITS CALLER, always. A skeleton whose box is not the box of the real thing is worse than
  * no skeleton at all: the screen settles, the player starts reading, and then it moves.
  */
-export function Skeleton({ className, onPanel = false }: { className?: string; onPanel?: boolean }) {
+export function Skeleton({
+  className,
+  onPanel = false,
+}: {
+  className?: string;
+  onPanel?: boolean;
+}) {
   return (
     <div
       aria-hidden="true"
@@ -495,16 +481,6 @@ export function Refreshing({ show }: { show: boolean }) {
       جارٍ التحديث…
     </span>
   );
-}
-
-/**
- * The stagger a list uses as it arrives.
- *
- * CAPPED ON PURPOSE: twenty deposits at 35ms each would take most of a second to finish appearing,
- * and the twentieth row is not worth waiting for. After the sixth they all arrive together.
- */
-export function enterDelay(index: number): CSSProperties {
-  return { animationDelay: `${Math.min(index, 5) * 35}ms` };
 }
 
 /** What the server said, verbatim — it is already Arabic and already written for the player. */
