@@ -45,9 +45,8 @@ import {
   Skeleton,
   StatusChip,
   StepTitle,
-  chipOf,
-  enterDelay,
 } from "./primitives";
+import { chipOf, enterDelay } from "./row-style";
 
 export function WithdrawTab() {
   const methods = usePaymentMethods(true);

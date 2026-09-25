@@ -19,17 +19,12 @@ import { ArrowDownToLine, Gift, Home, LifeBuoy, ReceiptText, User } from "lucide
 import { useState } from "react";
 
 import { AccountTab } from "@/components/miniapp/AccountTab";
-import {
-  AppBackdrop,
-  AppHeader,
-  BrandMark,
-  useBrand,
-  type BrandView,
-} from "@/components/miniapp/brand";
+import { AppBackdrop, AppHeader, BrandMark } from "@/components/miniapp/brand";
 import { DepositTab } from "@/components/miniapp/DepositTab";
 import { HomeTab } from "@/components/miniapp/HomeTab";
 import { ActionButton, Card } from "@/components/miniapp/primitives";
 import { SupportTab } from "@/components/miniapp/SupportTab";
+import { useBrand, type BrandView } from "@/components/miniapp/use-brand";
 import { WheelTab } from "@/components/miniapp/WheelTab";
 import { WithdrawTab } from "@/components/miniapp/WithdrawTab";
 import { tap } from "@/lib/api/telegram";

@@ -9,12 +9,12 @@
  * An EMPTY base is legitimate: `apiBaseUrl()` answers "" when nothing is configured and the host
  * has no domain to derive from (localhost, a container name), which means "same origin".
  */
-let base = '';
+let base = "";
 
 export function setApiBaseUrl(url: string): void {
-  base = url.replace(/\/+$/, '');
+  base = url.replace(/\/+$/, "");
 }
 
 export function apiUrl(path: string): string {
-  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }

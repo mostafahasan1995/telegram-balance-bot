@@ -36,5 +36,15 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // shadcn/ui components are vendored as `shadcn add` generates them, and upstream exports each
+    // component's `cva` variants and hooks (buttonVariants, useFormField, useSidebar, ...) from the
+    // same file. Splitting them would fork these files from upstream; the only cost of leaving them
+    // is that Fast Refresh reloads such a file in full instead of hot-swapping it.
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
   eslintPluginPrettier,
 );

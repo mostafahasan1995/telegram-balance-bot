@@ -14,7 +14,7 @@
 import { Gift } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { figureBackground, type BrandView } from "@/components/miniapp/brand";
+import { figureBackground, type BrandView } from "@/components/miniapp/use-brand";
 import { errorMessage } from "@/lib/api/client";
 import { useSpinWheel, useWheel } from "@/lib/api/hooks";
 import { tap } from "@/lib/api/telegram";

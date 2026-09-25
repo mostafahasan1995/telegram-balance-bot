@@ -23,7 +23,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-import type { BrandView } from "@/components/miniapp/brand";
+import type { BrandView } from "@/components/miniapp/use-brand";
 import { errorMessage } from "@/lib/api/client";
 import { useDeposits, usePaymentMethods, useWallet } from "@/lib/api/hooks";
 import type { PaymentRail, WalletView } from "@/lib/api/types";
@@ -44,9 +44,8 @@ import {
   Refreshing,
   RowsSkeleton,
   SectionTitle,
-  chipOf,
-  enterDelay,
 } from "./primitives";
+import { chipOf, enterDelay } from "./row-style";
 
 /** Picked from the rail, so a method the operator adds tomorrow still gets an icon. */
 function railIcon(rail: PaymentRail): LucideIcon {
@@ -221,8 +220,8 @@ export function HomeTab({
       </section>
 
       <Note icon={ShieldCheck}>
-        الرصيد يُقرأ مباشرة من حسابك على المنصة الخارجية. لا تشارك رقم المرجع أو صورة الإيصال مع
-        أي شخص غير الدعم الرسمي.
+        الرصيد يُقرأ مباشرة من حسابك على المنصة الخارجية. لا تشارك رقم المرجع أو صورة الإيصال مع أي
+        شخص غير الدعم الرسمي.
       </Note>
     </div>
   );

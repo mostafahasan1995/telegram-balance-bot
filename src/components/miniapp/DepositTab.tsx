@@ -46,9 +46,8 @@ import {
   SectionTitle,
   Skeleton,
   StepTitle,
-  chipOf,
-  enterDelay,
 } from "./primitives";
+import { chipOf, enterDelay } from "./row-style";
 
 /** Offered as quick taps beside the amount box, in whole currency units. */
 const QUICK_AMOUNTS = ["25000", "50000", "100000", "250000"];
@@ -302,9 +301,7 @@ function MethodCard({
       className={cn(
         "app-enter flex h-[116px] min-w-0 flex-col justify-between rounded-xl p-4 text-start",
         "transition active:scale-[0.98]",
-        selected
-          ? "bg-brand-soft outline-2 -outline-offset-2 outline-brand/60"
-          : "app-card-flush",
+        selected ? "bg-brand-soft outline-2 -outline-offset-2 outline-brand/60" : "app-card-flush",
       )}
     >
       <span
@@ -398,12 +395,13 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
           </p>
         </div>
 
-        {destination?.accountIdentifier !== null && destination?.accountIdentifier !== undefined && (
-          <CopyField
-            label={destination.label ?? destination.methodName}
-            value={destination.accountIdentifier}
-          />
-        )}
+        {destination?.accountIdentifier !== null &&
+          destination?.accountIdentifier !== undefined && (
+            <CopyField
+              label={destination.label ?? destination.methodName}
+              value={destination.accountIdentifier}
+            />
+          )}
         {destination?.accountHolder !== null && destination?.accountHolder !== undefined && (
           <CopyField label="اسم صاحب الحساب" value={destination.accountHolder} mono={false} />
         )}

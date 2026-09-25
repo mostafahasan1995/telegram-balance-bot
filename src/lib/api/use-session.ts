@@ -10,15 +10,15 @@
  * reports `needs-code` and the app asks for the one-time code the bot's /login prints. It must
  * never crash for being opened in a normal browser.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import { setApiBaseUrl } from './base-url';
-import { apiBaseUrl, tenantSlug } from './runtime-config';
-import { currentPlayer, signIn, signInWithCode } from './session';
-import { initData, readyAndExpand } from './telegram';
-import type { PlayerView } from './types';
+import { setApiBaseUrl } from "./base-url";
+import { apiBaseUrl, tenantSlug } from "./runtime-config";
+import { currentPlayer, signIn, signInWithCode } from "./session";
+import { initData, readyAndExpand } from "./telegram";
+import type { PlayerView } from "./types";
 
-export type SessionState = 'signing-in' | 'ready' | 'needs-code' | 'failed';
+export type SessionState = "signing-in" | "ready" | "needs-code" | "failed";
 
 export interface SessionHandle {
   state: SessionState;
@@ -31,7 +31,7 @@ export interface SessionHandle {
 }
 
 export function useSession(): SessionHandle {
-  const [state, setState] = useState<SessionState>('signing-in');
+  const [state, setState] = useState<SessionState>("signing-in");
   const [player, setPlayer] = useState<PlayerView | null>(currentPlayer);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -52,23 +52,23 @@ export function useSession(): SessionHandle {
      * honest answer: it is the one door that works from anywhere.
      */
     if (signed === null || tenant === null) {
-      setState('needs-code');
+      setState("needs-code");
       // Explicit: `noImplicitReturns` wants every path to say what it returns, and an effect that
       // has nothing to clean up returns undefined.
       return undefined;
     }
 
-    setState('signing-in');
+    setState("signing-in");
     signIn(signed, tenant)
       .then((result) => {
         if (cancelled) return;
         setPlayer(result);
-        setState('ready');
+        setState("ready");
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
         setError(cause instanceof Error ? cause.message : null);
-        setState('failed');
+        setState("failed");
       });
 
     return () => {
@@ -80,7 +80,7 @@ export function useSession(): SessionHandle {
     try {
       const result = await signInWithCode(code);
       setPlayer(result);
-      setState('ready');
+      setState("ready");
       setError(null);
       return true;
     } catch (cause: unknown) {
