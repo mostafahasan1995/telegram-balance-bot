@@ -60,6 +60,36 @@ export function fromMinor(minor: string, scale: number): string {
   return `${negative ? "-" : ""}${whole}${fraction}`;
 }
 
+/**
+ * How many DOLLARS `amount` (a decimal string in the operator's currency) is at `rate` (what one
+ * dollar is worth in that currency, also a decimal string) — rounded UP to the cent, the backend's
+ * own rule (usd-priced.ts): never tell a player to send less than their deposit is worth. "7.25",
+ * or "10" for a whole figure; null when either string is not a positive number.
+ */
+export function dollarsFor(amount: string, rate: string): string | null {
+  const amountScale = scaleOf(amount);
+  const rateScale = scaleOf(rate);
+  const amountMinor = toMinor(amount, amountScale);
+  const rateMinor = toMinor(rate, rateScale);
+  if (amountMinor === null || rateMinor === null) return null;
+  const numerator = BigInt(amountMinor) * 10n ** BigInt(rateScale) * 100n;
+  const denominator = BigInt(rateMinor) * 10n ** BigInt(amountScale);
+  if (denominator <= 0n || numerator <= 0n) return null;
+  const cents = (numerator + denominator - 1n) / denominator;
+  const decimal = fromMinor(cents.toString(), 2);
+  return decimal.endsWith(".00") ? decimal.slice(0, -3) : decimal;
+}
+
+/**
+ * «💱 سعر الصرف المعتمد: 1$ = 13,800 ل.س» — the line a player reads the moment they pick a dollar
+ * method (owner, 2026-09-27), in the same words the bot uses. The currency is labelled as players
+ * write the old lira; any other currency keeps its code.
+ */
+export function usdRateNotice(rate: string, currency: string): string {
+  const unit = currency === "NSP" ? "ل.س" : currency;
+  return `💱 سعر الصرف المعتمد: 1$ = ${formatAmount(rate)} ${unit}`;
+}
+
 /** a + b, on minor units. */
 export function addMinor(a: string, b: string): string {
   return (BigInt(a) + BigInt(b)).toString();
