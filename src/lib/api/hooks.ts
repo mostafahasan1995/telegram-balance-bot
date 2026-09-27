@@ -46,6 +46,7 @@ export const queryKeys = {
   me: ["me"] as const,
   wallet: ["wallet"] as const,
   paymentMethods: ["payment-methods"] as const,
+  payoutMethods: ["payment-methods", "payout"] as const,
   deposits: ["deposits"] as const,
   deposit: (shortId: string) => ["deposits", shortId] as const,
   withdrawals: ["withdrawals"] as const,
@@ -149,6 +150,28 @@ export function usePaymentMethods(enabled: boolean): UseQueryResult<PaymentMetho
     queryFn: async () => {
       return rowsOf(
         await api<Paginated<PaymentMethodView> | PaymentMethodView[]>("/v1/payment-methods"),
+      );
+    },
+    enabled,
+    staleTime: 5 * MINUTE,
+  });
+}
+
+/**
+ * The methods a player can be PAID through — the withdrawal screen's list.
+ *
+ * NOT the deposit list. The withdrawal screen used to read `GET /v1/payment-methods`, which is what
+ * a player can PAY IN with: another set, with another minimum folded in, and a method the operator
+ * has configured for deposits is not thereby one it pays out through. `/v1/payment-methods/payout`
+ * is the same list the bot's 💸 offers (WithdrawalService.payoutMethodsFor): switched on, configured,
+ * never INTERNAL.
+ */
+export function usePayoutMethods(enabled: boolean): UseQueryResult<PaymentMethodView[]> {
+  return useQuery({
+    queryKey: queryKeys.payoutMethods,
+    queryFn: async () => {
+      return rowsOf(
+        await api<Paginated<PaymentMethodView> | PaymentMethodView[]>("/v1/payment-methods/payout"),
       );
     },
     enabled,

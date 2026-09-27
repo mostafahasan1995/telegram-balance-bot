@@ -20,13 +20,22 @@ import { errorMessage } from "@/lib/api/client";
 import {
   isOpenWithdrawal,
   useCreateWithdrawal,
-  usePaymentMethods,
+  usePayoutMethods,
   useWallet,
   useWithdrawals,
 } from "@/lib/api/hooks";
 import { tap } from "@/lib/api/telegram";
 import type { PaymentMethodView } from "@/lib/api/types";
-import { formatAmount, formatWhole, fromMinor, scaleOf, timeOf, toMinor } from "@/lib/money";
+import {
+  dollarsFor,
+  formatAmount,
+  formatWhole,
+  fromMinor,
+  scaleOf,
+  timeOf,
+  toMinor,
+  usdRateNotice,
+} from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 import {
@@ -49,7 +58,8 @@ import {
 import { chipOf, enterDelay } from "./row-style";
 
 export function WithdrawTab() {
-  const methods = usePaymentMethods(true);
+  // The PAYOUT list — what the bot's 💸 offers — never the deposit list (see usePayoutMethods).
+  const methods = usePayoutMethods(true);
   const withdrawals = useWithdrawals(true);
   const wallet = useWallet(true);
   const create = useCreateWithdrawal();
@@ -207,6 +217,25 @@ export function WithdrawTab() {
               })}
             </div>
           </section>
+
+          {/*
+            A DOLLAR method (USDT, Sham Cash dollars): the player is cashing pounds out into
+            dollars, and is told the rate the moment they pick it, before they type an amount
+            (owner, 2026-09-27) — and what their amount comes to, as they type it.
+          */}
+          {active !== null && active.usdPriced === true && typeof active.usdRate === "string" && (
+            <Card className="app-enter space-y-1">
+              <p className="text-small font-semibold text-ink">
+                {usdRateNotice(active.usdRate, active.currencyCode)}
+              </p>
+              {minor !== null && dollarsFor(fromMinor(minor, scale), active.usdRate) !== null && (
+                <p className="text-micro text-ink-muted">
+                  ما يعادل تقريباً:{" "}
+                  <Num>{dollarsFor(fromMinor(minor, scale), active.usdRate)} $</Num>
+                </p>
+              )}
+            </Card>
+          )}
 
           <section className="space-y-3">
             <StepTitle step={2}>المبلغ</StepTitle>

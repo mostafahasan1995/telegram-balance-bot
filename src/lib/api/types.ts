@@ -87,9 +87,15 @@ export interface WalletView {
   };
 }
 
-export type PaymentRail = "CASH_AGENT" | "EWALLET" | "BANK_TRANSFER" | "CRYPTO";
+/** The backend's `payment_rail` enum, spelled as it sends it (prisma/schema.prisma). */
+export type PaymentRail = "BANK_TRANSFER" | "MOBILE_WALLET" | "CASH_OFFICE" | "CRYPTO" | "INTERNAL";
 
-export type RailProofField = "reference" | "senderAccount" | "txHash" | "image";
+/**
+ * What a rail asks the player for, as the backend's rail drivers name it (rail.interface.ts). These
+ * used to be written in camelCase here, which matched nothing the server ever sent.
+ */
+export type RailProofField =
+  "REFERENCE" | "SENDER_ACCOUNT" | "SENDER_NAME" | "RECEIPT_IMAGE" | "TX_HASH" | "NETWORK";
 
 export interface PaymentMethodView {
   id: string;
@@ -106,6 +112,14 @@ export interface PaymentMethodView {
   instructions: string | null;
   /** From the rail driver, so the app renders the right form without hardcoding rails. */
   requiredProofFields: readonly RailProofField[];
+  /**
+   * Paid in DOLLARS (USDT, «شام كاش دولار») and credited in `currencyCode` (owner, 2026-09-27). The
+   * player is told `usdRate` the moment they pick it. Optional: a backend older than the field
+   * simply never shows the notice.
+   */
+  usdPriced?: boolean;
+  /** What ONE dollar is worth in `currencyCode`, as a decimal string ("13800"), or null. */
+  usdRate?: string | null;
 }
 
 export interface DepositDestinationView {

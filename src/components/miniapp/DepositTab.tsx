@@ -27,7 +27,16 @@ import {
 } from "@/lib/api/hooks";
 import { tap } from "@/lib/api/telegram";
 import type { DepositView, PaymentMethodView } from "@/lib/api/types";
-import { formatAmount, formatWhole, fromMinor, scaleOf, timeOf, toMinor } from "@/lib/money";
+import {
+  dollarsFor,
+  formatAmount,
+  formatWhole,
+  fromMinor,
+  scaleOf,
+  timeOf,
+  toMinor,
+  usdRateNotice,
+} from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 import {
@@ -131,7 +140,7 @@ export function DepositTab() {
   return (
     <div className="space-y-6">
       {open !== null ? (
-        <FinishPanel deposit={open} />
+        <FinishPanel deposit={open} methods={methods.data ?? []} />
       ) : (
         <>
           <section className="space-y-3">
@@ -151,6 +160,14 @@ export function DepositTab() {
               ))}
             </div>
           </section>
+
+          {active !== null && active.usdPriced === true && typeof active.usdRate === "string" && (
+            <UsdRateCard
+              rate={active.usdRate}
+              currency={active.currencyCode}
+              amount={minor === null ? null : fromMinor(minor, scale)}
+            />
+          )}
 
           <section className="space-y-3">
             <StepTitle step={2}>المبلغ</StepTitle>
@@ -331,13 +348,49 @@ function MethodCard({
 }
 
 /**
+ * «💱 سعر الصرف المعتمد: 1$ = 13,800 ل.س» — shown the moment a DOLLAR method (USDT, Sham Cash
+ * dollars) is picked, before an amount is typed (owner, 2026-09-27: «لما يختار المستخدم طريقة الدولار
+ * منبعتله تنبيه ان هيك نسبة التحويل منشان يكون بالصورة»). Once an amount is typed, what it comes to
+ * in dollars is said under it — rounded up to the cent, as the server rounds it.
+ */
+function UsdRateCard({
+  rate,
+  currency,
+  amount,
+}: {
+  rate: string;
+  currency: string;
+  amount: string | null;
+}) {
+  const dollars = amount === null ? null : dollarsFor(amount, rate);
+  return (
+    <Card className="app-enter space-y-1">
+      <p className="text-small font-semibold text-ink">{usdRateNotice(rate, currency)}</p>
+      {dollars !== null && (
+        <p className="text-micro text-ink-muted">
+          ستحوّل ما يعادل: <Num>{dollars} $</Num>
+        </p>
+      )}
+    </Card>
+  );
+}
+
+/**
  * The open request: where to send the money, and the one thing we still need back.
  *
- * WHICH FIELD IS ASKED FOR COMES FROM THE SERVER (`destination.requiresReference` and the rail),
+ * WHICH FIELD IS ASKED FOR COMES FROM THE SERVER (the method's `requiredProofFields` and the rail),
  * never from a hardcoded list of method codes — an operator adding a rail must not require an app
- * release.
+ * release. A method whose driver asks for the transfer notice alone (MTN كاش, شام كاش دولار — a
+ * person verifies those) gets no number box: the number box posts to the Sham Cash statement check,
+ * which refuses every other rail, so it was a button that could only ever fail.
  */
-function FinishPanel({ deposit }: { deposit: DepositView }) {
+function FinishPanel({
+  deposit,
+  methods,
+}: {
+  deposit: DepositView;
+  methods: readonly PaymentMethodView[];
+}) {
   const reference = useSubmitReference();
   const txHash = useSubmitTxHash();
   const proof = useSubmitProof();
@@ -348,8 +401,18 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
   const [sent, setSent] = useState(false);
 
   const destination = deposit.destination;
+  const method = methods.find((candidate) => candidate.code === destination?.methodCode) ?? null;
   const isCrypto = destination?.methodCode.toLowerCase().includes("usdt") === true;
+  const receiptOnly =
+    method !== null &&
+    method.requiredProofFields.includes("RECEIPT_IMAGE") &&
+    !method.requiredProofFields.includes("REFERENCE");
   const referenceLabel = isCrypto ? "رقم العملية (TXID)" : "رقم العملية";
+  // A dollar method: the figure to send is dollars, at the operator's rate (rounded up to the cent).
+  const dollars =
+    method !== null && method.usdPriced === true && typeof method.usdRate === "string"
+      ? dollarsFor(deposit.claimed.amount, method.usdRate)
+      : null;
 
   async function send(): Promise<void> {
     tap();
@@ -384,14 +447,28 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
         <div className="space-y-1">
           <div className="flex flex-wrap items-baseline gap-x-2 text-title font-semibold text-ink">
             <span>حوّل</span>
-            <Money
-              amount={formatAmount(deposit.claimed.amount)}
-              currency={deposit.claimed.currency}
-              unitClassName="text-body text-ink-muted"
-            />
+            {dollars !== null ? (
+              <Num>{dollars} $</Num>
+            ) : (
+              <Money
+                amount={formatAmount(deposit.claimed.amount)}
+                currency={deposit.claimed.currency}
+                unitClassName="text-body text-ink-muted"
+              />
+            )}
           </div>
+          {dollars !== null && method !== null && typeof method.usdRate === "string" && (
+            <p className="text-small text-ink-muted" data-testid="usd-rate-finish">
+              {usdRateNotice(method.usdRate, deposit.claimed.currency)} · قيمة طلبك{" "}
+              <Num>
+                {formatAmount(deposit.claimed.amount)} {deposit.claimed.currency}
+              </Num>
+            </p>
+          )}
           <p className="text-small text-ink-muted">
-            إلى الحساب التالي، ثم أرسل {referenceLabel} هنا.
+            {receiptOnly
+              ? "إلى الحساب التالي، ثم أرفق صورة إشعار التحويل هنا."
+              : `إلى الحساب التالي، ثم أرسل ${referenceLabel} هنا.`}
           </p>
         </div>
 
@@ -411,22 +488,26 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
           </p>
         )}
 
-        <div className="space-y-1.5">
-          <label className="block text-small font-semibold text-ink" htmlFor="deposit-reference">
-            {referenceLabel}
-          </label>
-          <input
-            id="deposit-reference"
-            dir="ltr"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            placeholder={isCrypto ? "0x…" : "000000000"}
-            className="app-field app-code"
-          />
-        </div>
+        {!receiptOnly && (
+          <div className="space-y-1.5">
+            <label className="block text-small font-semibold text-ink" htmlFor="deposit-reference">
+              {referenceLabel}
+            </label>
+            <input
+              id="deposit-reference"
+              dir="ltr"
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              placeholder={isCrypto ? "0x…" : "000000000"}
+              className="app-field app-code"
+            />
+          </div>
+        )}
 
         <div className="space-y-1.5">
-          <span className="block text-small font-semibold text-ink">إيصال الدفع (اختياري)</span>
+          <span className="block text-small font-semibold text-ink">
+            {receiptOnly ? "صورة إشعار التحويل" : "إيصال الدفع (اختياري)"}
+          </span>
           <label
             className={cn(
               "grid aspect-[5/3] w-full cursor-pointer place-items-center rounded-xl",
@@ -463,13 +544,16 @@ function FinishPanel({ deposit }: { deposit: DepositView }) {
           </p>
         )}
 
-        <ActionButton
-          disabled={value.trim().length === 0 || busy}
-          busy={busy}
-          onClick={() => void send()}
-        >
-          {busy ? "جارٍ الإرسال…" : "إرسال"}
-        </ActionButton>
+        {/* On a photo-only rail the photo IS the submission; there is no number to send. */}
+        {!receiptOnly && (
+          <ActionButton
+            disabled={value.trim().length === 0 || busy}
+            busy={busy}
+            onClick={() => void send()}
+          >
+            {busy ? "جارٍ الإرسال…" : "إرسال"}
+          </ActionButton>
+        )}
 
         <button
           type="button"
