@@ -12,7 +12,7 @@
  * That has already shipped once. `<Num>` is `dir="ltr"` plus `unicode-bidi: isolate` plus tabular
  * figures, and it is not optional.
  */
-import { Check, Copy, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Copy, type LucideIcon } from "lucide-react";
 import { useState, type CSSProperties, type ReactNode } from "react";
 
 import { tap } from "@/lib/api/telegram";
@@ -288,9 +288,13 @@ export function CopyField({
 /**
  * One operation in a history list — a deposit, a withdrawal, the two the home screen shows.
  *
- * ONE COMPONENT FOR ALL THREE LISTS. They were three near-identical blocks of JSX, which is how
+ * ONE COMPONENT FOR ALL THE LISTS. They were three near-identical blocks of JSX, which is how
  * two of them ended up without a `min-w-0` and pushed their cards off the screen the moment a
  * method name and a short id shared a line.
+ *
+ * AND IT CAN OPEN (the history screen): given `onToggle`, the row is a button, a chevron says it
+ * opens, and `children` — the operation's details — appear under a hairline inside the same card.
+ * Without it the row is exactly what it always was.
  */
 export function OperationRow({
   at,
@@ -299,6 +303,9 @@ export function OperationRow({
   meta,
   status,
   index,
+  onToggle,
+  expanded = false,
+  children,
 }: {
   /** ISO-8601, as the backend sends it. */
   at: string;
@@ -308,12 +315,16 @@ export function OperationRow({
   meta: readonly string[];
   status: ChipStatus;
   index: number;
+  onToggle?: () => void;
+  expanded?: boolean;
+  /** Shown under the row while it is expanded. */
+  children?: ReactNode;
 }) {
   const { day, month } = dayMonthOf(at);
   const line = meta.filter((part) => part.length > 0).join(" · ");
 
-  return (
-    <Card style={enterDelay(index)} className="app-enter flex items-center gap-3">
+  const head = (
+    <>
       <span className="app-tile flex size-11 flex-col justify-center gap-0.5">
         <Num className="text-micro font-bold text-ink">{day}</Num>
         {/* Two of the twelve Arabic month names are wider than the tile. The tile stays 44px. */}
@@ -324,7 +335,54 @@ export function OperationRow({
         {line.length > 0 && <div className="truncate text-micro text-ink-muted">{line}</div>}
       </div>
       <StatusChip status={status} />
+    </>
+  );
+
+  if (onToggle === undefined) {
+    return (
+      <Card style={enterDelay(index)} className="app-enter flex items-center gap-3">
+        {head}
+      </Card>
+    );
+  }
+
+  return (
+    <Card style={enterDelay(index)} className="app-enter">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => {
+          tap();
+          onToggle();
+        }}
+        className="flex w-full items-center gap-3 text-start transition active:scale-[0.99]"
+      >
+        {head}
+        <ChevronDown
+          aria-hidden="true"
+          className={cn(
+            "size-4 shrink-0 text-ink-muted transition-transform duration-200",
+            expanded && "rotate-180",
+          )}
+        />
+      </button>
+      {expanded && children !== undefined && (
+        <div className="app-enter mt-3 space-y-3 border-t border-hairline pt-3">{children}</div>
+      )}
     </Card>
+  );
+}
+
+/**
+ * One fact of an operation's details: what it is on the start side, the value on the end side.
+ * The value wraps rather than truncates — it may be a reference the player has to read back.
+ */
+export function FactRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-small">
+      <span className="shrink-0 text-ink-muted">{label}</span>
+      <span className="min-w-0 break-words text-end font-medium text-ink">{children}</span>
+    </div>
   );
 }
 

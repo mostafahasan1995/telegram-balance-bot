@@ -37,6 +37,8 @@ export interface BrandView {
   wheelBackgroundUrl: string | null;
   /** Only a fallback — a screen that has a wallet or a method in hand uses ITS currency. */
   currencyCode: string | null;
+  /** Where the 🎮 tile goes: the backend's games link, or the public site's while none has come. */
+  gamesUrl: string;
   /** The custom properties to spread onto the app root. Empty when no colour was configured. */
   style: CSSProperties;
 }
@@ -64,8 +66,23 @@ export function useBrand(): BrandView {
     backgroundUrl: safeUrl(data?.backgroundUrl),
     wheelBackgroundUrl: safeUrl(data?.wheelBackgroundUrl),
     currencyCode: textOf(data?.currencyCode),
+    gamesUrl: externalUrl(data?.gamesUrl) ?? DEFAULT_GAMES_URL,
     style: brandStyle(data?.brandColor),
   };
+}
+
+/**
+ * The games page before (or without) branding: ICHANCY_PLAYER_SITE_URL's own default plus `/games`.
+ * The backend sends the configured one as `gamesUrl`; this is only what a tap opens meanwhile.
+ */
+const DEFAULT_GAMES_URL = "https://ichancy.com/games";
+
+/** A link to open in the host's browser: http(s), nothing that could break out of an attribute. */
+function externalUrl(url: string | null | undefined): string | null {
+  if (typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (trimmed.length === 0 || trimmed.length > 2048) return null;
+  return /^https?:\/\/[^\s"'<>\\]+$/i.test(trimmed) ? trimmed : null;
 }
 
 /** `<AppBackdrop>`'s picture trick for a single card — the wheel, and only the wheel. */

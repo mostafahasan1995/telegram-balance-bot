@@ -1,6 +1,11 @@
 /**
- * The first screen: what the casino says the player has, the ways to add to it, and the last two
+ * The first screen: what the casino says the player has, the ways to add to it, the extras (the
+ * owner's six player features of 2026-09-27, the same as the bot's keyboard), and the last two
  * operations.
+ *
+ * THE EXTRAS ARE THE ONE PLACE THAT MOVES ON ITS OWN. The owner asked for lively icons, so each
+ * glyph has a small motion of its own (styles.css) — in a grid BELOW the two money buttons and
+ * never inside the balance card, and only for players whose phone has not asked for less motion.
  *
  * THE BALANCE IS THE SCREEN. It is the one elevated surface, the one figure at display size, and
  * the only place the app spends a shadow — a player opens this to read a number, and everything
@@ -17,15 +22,22 @@ import {
   ArrowDownToLine,
   ArrowLeft,
   ArrowUpRight,
+  Flame,
+  Gamepad2,
+  Gift,
+  Handshake,
   Landmark,
   ReceiptText,
+  ScrollText,
   ShieldCheck,
+  Trophy,
   Wallet,
 } from "lucide-react";
 
-import type { BrandView } from "@/components/miniapp/use-brand";
+import { cssVars, type BrandView } from "@/components/miniapp/use-brand";
 import { errorMessage } from "@/lib/api/client";
 import { useDeposits, usePaymentMethods, useWallet } from "@/lib/api/hooks";
+import { openExternal, tap } from "@/lib/api/telegram";
 import type { PaymentRail, WalletView } from "@/lib/api/types";
 import { formatAmount, formatWhole, timeOf } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -52,16 +64,86 @@ function railIcon(rail: PaymentRail): LucideIcon {
   return rail === "BANK_TRANSFER" ? Landmark : Wallet;
 }
 
+/** The owner's extras (2026-09-27) that open a screen of the app. 🎮 is not one: it leaves. */
+export type ExtraScreenId = "history" | "gift" | "wins" | "offers" | "referrals";
+
+type Motion = "wiggle" | "bounce" | "float" | "flicker" | "sway" | "shake";
+
+interface Feature {
+  id: ExtraScreenId | "games";
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+  /** Each feature moves its own way (styles.css, `.app-motion-*`). */
+  motion: Motion;
+  /** An oklch hue angle; the tile's lightness and chroma come from styles.css. */
+  hue: number;
+}
+
+/**
+ * The extras, in the order the grid shows them — right to left, as the page reads. The same six
+ * the bot's keyboard carries, with the same words.
+ */
+const FEATURES: readonly Feature[] = [
+  {
+    id: "history",
+    label: "سجل المعاملات",
+    hint: "إيداع وسحب",
+    icon: ScrollText,
+    motion: "float",
+    hue: 250,
+  },
+  { id: "gift", label: "إهداء رصيد", hint: "لصديق", icon: Gift, motion: "wiggle", hue: 350 },
+  {
+    id: "offers",
+    label: "العروض الحالية",
+    hint: "لا تفوّتها",
+    icon: Flame,
+    motion: "flicker",
+    hue: 40,
+  },
+  {
+    id: "wins",
+    label: "شارك إصابتك",
+    hint: "صورة أو فيديو",
+    icon: Trophy,
+    motion: "bounce",
+    hue: 85,
+  },
+  {
+    id: "referrals",
+    label: "الإحالات والأرباح",
+    hint: "ادعُ واربح",
+    icon: Handshake,
+    motion: "sway",
+    hue: 300,
+  },
+  {
+    id: "games",
+    label: "ألعاب Ichancy",
+    hint: "افتح الألعاب",
+    icon: Gamepad2,
+    motion: "shake",
+    hue: 163,
+  },
+];
+
 export function HomeTab({
   brand,
   onDeposit,
   onWithdraw,
+  onOpen,
+  canOpen,
 }: {
   brand: BrandView;
   /** Switches to the deposit tab. It taps for itself — the shell's switcher owns the haptic. */
   onDeposit: () => void;
   /** Switches to the withdraw tab. Same. */
   onWithdraw: () => void;
+  /** Opens one of the extras' screens. Same. */
+  onOpen: (screen: ExtraScreenId) => void;
+  /** Whether that screen is wired into this build; a tile for one that is not is left out. */
+  canOpen: (screen: ExtraScreenId) => boolean;
 }) {
   const wallet = useWallet(true);
   const methods = usePaymentMethods(true);
@@ -71,6 +153,9 @@ export function HomeTab({
   const rails = methods.data ?? [];
   const recent = (deposits.data ?? []).slice(0, 2);
   const currency = funds?.currency ?? brand.currencyCode ?? "";
+  const features = FEATURES.filter((feature) => feature.id === "games" || canOpen(feature.id));
+  // "عرض الكل" is the whole history once that screen exists; the deposits until then.
+  const showAll = canOpen("history") ? () => onOpen("history") : onDeposit;
 
   return (
     <div className="space-y-6">
@@ -123,6 +208,28 @@ export function HomeTab({
           سحب رصيد
         </ActionButton>
       </div>
+
+      <section className="space-y-3">
+        <SectionTitle>مزايا إضافية</SectionTitle>
+        <div className="grid grid-cols-3 gap-2.5">
+          {features.map((feature, index) => (
+            <FeatureTile
+              key={feature.id}
+              feature={feature}
+              index={index}
+              onSelect={() => {
+                if (feature.id === "games") {
+                  // Leaves the app, so the shell's switcher never sees it: the haptic is ours.
+                  tap();
+                  openExternal(brand.gamesUrl);
+                  return;
+                }
+                onOpen(feature.id);
+              }}
+            />
+          ))}
+        </div>
+      </section>
 
       <section className="space-y-3">
         <SectionTitle>طرق الدفع المتاحة</SectionTitle>
@@ -180,7 +287,7 @@ export function HomeTab({
               <Refreshing show={deposits.isFetching && !deposits.isPending} />
               <button
                 type="button"
-                onClick={onDeposit}
+                onClick={showAll}
                 className="flex items-center gap-1 text-small font-semibold text-brand-ink"
               >
                 عرض الكل <ArrowUpRight className="size-3.5" />
@@ -224,6 +331,51 @@ export function HomeTab({
         شخص غير الدعم الرسمي.
       </Note>
     </div>
+  );
+}
+
+/**
+ * One extra: a tinted tile whose glyph moves in its own way, over a label that may take two lines.
+ *
+ * THE LABEL BOX IS ALWAYS TWO LINES TALL, so a one-line label and a two-line one leave their row's
+ * tiles level. Each glyph starts its motion at its own delay — six icons moving in step look like a
+ * loading screen, six moving at their own moments look alive.
+ */
+function FeatureTile({
+  feature,
+  index,
+  onSelect,
+}: {
+  feature: Feature;
+  index: number;
+  onSelect: () => void;
+}) {
+  const Icon = feature.icon;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      style={enterDelay(index)}
+      className="app-feature app-enter"
+    >
+      <span className="app-feature-icon" style={cssVars({ "--feat-h": String(feature.hue) })}>
+        <span
+          aria-hidden="true"
+          className={cn("app-feature-glyph", `app-motion-${feature.motion}`)}
+          style={{ animationDelay: `${index * 450}ms` }}
+        >
+          <Icon className="size-[22px]" />
+        </span>
+      </span>
+      <span className="flex w-full min-w-0 flex-col gap-0.5">
+        <span className="flex min-h-[2.5rem] items-center justify-center">
+          <span className="line-clamp-2 text-small font-semibold leading-tight text-ink">
+            {feature.label}
+          </span>
+        </span>
+        <span className="truncate text-nano text-ink-muted">{feature.hint}</span>
+      </span>
+    </button>
   );
 }
 

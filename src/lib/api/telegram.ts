@@ -16,6 +16,13 @@ interface TelegramWebApp {
   openLink?: (url: string) => void;
   /** Bot API 6.9+. Throws on an older client, or while an earlier request is still open. */
   requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
+  /** Bot API 6.1+: the ← in Telegram's own header. */
+  BackButton?: {
+    show?: () => void;
+    hide?: () => void;
+    onClick?: (callback: () => void) => void;
+    offClick?: (callback: () => void) => void;
+  };
 }
 
 declare global {
@@ -81,6 +88,30 @@ export function requestWriteAccess(timeoutMs = 5000): Promise<boolean | null> {
       resolve(null);
     }
   });
+}
+
+/**
+ * Shows Telegram's own ← for a screen one step below home, calling `onBack` when it is tapped.
+ * Returns what undoes it — the effect cleanup of the screen that asked. Outside Telegram, or on a
+ * client too old for it, nothing is shown and the in-page way back is the only one.
+ */
+export function showBackButton(onBack: () => void): () => void {
+  const button = webApp()?.BackButton;
+  if (button?.show === undefined || button.onClick === undefined) return () => undefined;
+  try {
+    button.onClick(onBack);
+    button.show();
+  } catch {
+    return () => undefined;
+  }
+  return () => {
+    try {
+      button.offClick?.(onBack);
+      button.hide?.();
+    } catch {
+      // A webview being torn down may refuse; there is nothing left to hide then.
+    }
+  };
 }
 
 /** Opens an external site in the host's browser rather than inside the webview. */
