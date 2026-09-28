@@ -75,15 +75,20 @@ async function readError(response: Response): Promise<ApiError> {
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const session = readSession();
+  // A FormData body (a win's photo or video) goes as it is: the browser writes the multipart
+  // Content-Type with its boundary, so none is set here and nothing is stringified.
+  const multipart = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (options.body !== undefined && !multipart) headers["Content-Type"] = "application/json";
   if (session !== null) headers["Authorization"] = `Bearer ${session.accessToken}`;
   if (options.idempotencyKey !== undefined) headers["Idempotency-Key"] = options.idempotencyKey;
 
   // Built up rather than written as one literal: `exactOptionalPropertyTypes` refuses an explicit
   // `undefined` for an optional field, and both `body` and `signal` are optional here.
   const init: RequestInit = { method: options.method ?? "GET", headers };
-  if (options.body !== undefined) init.body = JSON.stringify(options.body);
+  if (options.body !== undefined) {
+    init.body = multipart ? (options.body as FormData) : JSON.stringify(options.body);
+  }
   if (options.signal !== undefined) init.signal = options.signal;
 
   let response: Response;

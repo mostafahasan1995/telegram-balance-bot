@@ -1,5 +1,6 @@
 /**
- * The whole app: the sign-in gate, the six tabs, and the bar that switches them.
+ * The whole app: the sign-in gate, the six tabs, the bar that switches them, and the extras'
+ * screens (📜 and the owner's other 2026-09-27 features) that open from the home screen's grid.
  *
  * IT LIVES IN A COMPONENT AND NOT IN A ROUTE because it is reachable at two paths — / and
  * /<tenant>, which is how an operator's mini app is addressed (app.<domain>/<tenant>). Both
@@ -15,36 +16,80 @@
  * backdrop sits between the two; a `bg-background` here would be painted on top of the operator's
  * picture and hide it.
  */
-import { ArrowDownToLine, Gift, Home, LifeBuoy, ReceiptText, User } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowDownToLine,
+  ArrowRight,
+  FerrisWheel,
+  Home,
+  LifeBuoy,
+  ReceiptText,
+  User,
+} from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { AccountTab } from "@/components/miniapp/AccountTab";
 import { AppBackdrop, AppHeader, BrandMark } from "@/components/miniapp/brand";
 import { DepositTab } from "@/components/miniapp/DepositTab";
-import { HomeTab } from "@/components/miniapp/HomeTab";
+import { GiftTab } from "@/components/miniapp/GiftTab";
+import { HistoryTab } from "@/components/miniapp/HistoryTab";
+import { HomeTab, type ExtraScreenId } from "@/components/miniapp/HomeTab";
+import { OffersTab } from "@/components/miniapp/OffersTab";
+import { ReferralsTab } from "@/components/miniapp/ReferralsTab";
 import { ActionButton, Card } from "@/components/miniapp/primitives";
 import { SupportTab } from "@/components/miniapp/SupportTab";
 import { useBrand, type BrandView } from "@/components/miniapp/use-brand";
 import { WheelTab } from "@/components/miniapp/WheelTab";
+import { WinsTab } from "@/components/miniapp/WinsTab";
 import { WithdrawTab } from "@/components/miniapp/WithdrawTab";
-import { tap } from "@/lib/api/telegram";
+import { showBackButton, tap } from "@/lib/api/telegram";
 import { useSession } from "@/lib/api/use-session";
 import { cn } from "@/lib/utils";
 
+/*
+ * The wheel wears the ferris wheel, not the gift box it used to: 🎁 is «إهداء رصيد» now, on the
+ * home screen's extras, and one icon must not mean two things in the same app.
+ */
 const tabs = [
   { id: "home", label: "الرئيسية", icon: Home },
   { id: "deposit", label: "إيداع", icon: ReceiptText },
   { id: "withdraw", label: "سحب", icon: ArrowDownToLine },
-  { id: "wheel", label: "العجلة", icon: Gift },
+  { id: "wheel", label: "العجلة", icon: FerrisWheel },
   { id: "account", label: "الحساب", icon: User },
   { id: "support", label: "الدعم", icon: LifeBuoy },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
 
-/** Where a tab sits in the bar. `TabId` is the bar's own union, so -1 cannot come back. */
-function indexOf(id: TabId): number {
-  return tabs.findIndex((entry) => entry.id === id);
+/**
+ * The owner's extras (2026-09-27) that are screens of this app, reached from the home screen's
+ * grid rather than the bar — six slots are all a 320px bar holds. A feature not listed here has no
+ * tile on the home screen (HomeTab asks `canOpen`), so a screen is switched on by adding its line.
+ * 🎮 is not here at all: it opens the Ichancy site outside the app.
+ */
+const extraScreens: Partial<Record<ExtraScreenId, () => ReactNode>> = {
+  history: () => <HistoryTab />,
+  gift: () => <GiftTab />,
+  wins: () => <WinsTab />,
+  offers: () => <OffersTab />,
+  referrals: () => <ReferralsTab />,
+};
+
+type ScreenId = TabId | ExtraScreenId;
+
+function isTab(id: ScreenId): id is TabId {
+  return tabs.some((entry) => entry.id === id);
+}
+
+function canOpen(id: ExtraScreenId): boolean {
+  return extraScreens[id] !== undefined;
+}
+
+/**
+ * Where a screen sits along the strip: a bar tab at its slot, an extra past the end — one step
+ * below home — so opening one moves forward and leaving it moves back.
+ */
+function indexOf(id: ScreenId): number {
+  return isTab(id) ? tabs.findIndex((entry) => entry.id === id) : tabs.length;
 }
 
 /**
@@ -55,7 +100,7 @@ function indexOf(id: TabId): number {
 export function MiniApp() {
   const session = useSession();
   const brand = useBrand();
-  const [tab, setTab] = useState<TabId>("home");
+  const [tab, setTab] = useState<ScreenId>("home");
   /**
    * Which way the last switch went along the bar. The incoming panel's animation follows it, so the
    * six screens read as one strip the player is moving along rather than six unrelated pages.
@@ -64,17 +109,34 @@ export function MiniApp() {
 
   /**
    * THE ONE PLACE A TAB CHANGES, and therefore the one place the haptic lives — the screens that
-   * switch tabs themselves (the home screen's two big buttons, its method rows) go through here, so
-   * a tap is felt exactly once however it was reached.
+   * switch tabs themselves (the home screen's two big buttons, its method rows, its extras) go
+   * through here, so a tap is felt exactly once however it was reached.
    */
-  function go(next: TabId): void {
+  function go(next: ScreenId): void {
     if (next === tab) return;
     tap();
     setForward(indexOf(next) > indexOf(tab));
     setTab(next);
   }
 
-  const active = indexOf(tab);
+  /*
+   * An extra is one step below home, so Telegram's own ← is shown there and takes the player back
+   * — the in-page «الرئيسية» above the screen does the same outside Telegram. The setters are
+   * stable, so this runs only when the screen changes.
+   */
+  const extra = isTab(tab) ? null : tab;
+  useEffect(() => {
+    if (extra === null) return undefined;
+    return showBackButton(() => {
+      tap();
+      setForward(false);
+      setTab("home");
+    });
+  }, [extra]);
+
+  const renderExtra = extra === null ? undefined : extraScreens[extra];
+  // An extra lights up home in the bar: it is where the player came from and how they go back.
+  const active = indexOf(isTab(tab) ? tab : "home");
   const ready = session.state === "ready";
 
   return (
@@ -97,6 +159,8 @@ export function MiniApp() {
                   brand={brand}
                   onDeposit={() => go("deposit")}
                   onWithdraw={() => go("withdraw")}
+                  onOpen={go}
+                  canOpen={canOpen}
                 />
               )}
               {tab === "deposit" && <DepositTab />}
@@ -104,6 +168,20 @@ export function MiniApp() {
               {tab === "wheel" && <WheelTab brand={brand} />}
               {tab === "account" && <AccountTab />}
               {tab === "support" && <SupportTab />}
+              {renderExtra !== undefined && (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => go("home")}
+                    className="flex items-center gap-1.5 text-small font-semibold text-brand-ink"
+                  >
+                    {/* Back is to the right in an Arabic page. */}
+                    <ArrowRight className="size-4" />
+                    الرئيسية
+                  </button>
+                  {renderExtra()}
+                </div>
+              )}
             </div>
           </main>
 

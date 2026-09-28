@@ -178,8 +178,8 @@ export function WheelTab({ brand }: { brand: BrandView }) {
       {prize !== null && !turning && <Result spin={prize} />}
 
       <Note icon={Gift}>
-        دورة واحدة لكل حملة، والنتيجة تُحسم على الخادم قبل أن تدور العجلة. تُضاف الجائزة إلى رصيدك
-        على المنصة تلقائياً، ولا حاجة لمراسلة الدعم قبل أن تستقر حالة الجائزة.
+        دورة واحدة لكل حملة، والنتيجة تُحسم على الخادم قبل أن تدور العجلة. تنضاف الجائزة لمحفظة
+        البونص فوراً، وبس توصل المحفظة للحد بتقدر تحوّلها لرصيدك من «العروض».
       </Note>
     </div>
   );
@@ -187,7 +187,7 @@ export function WheelTab({ brand }: { brand: BrandView }) {
 
 /** What the player drew, and what is happening to it. */
 function Result({ spin }: { spin: WheelSpinView }) {
-  const note = creditNote(spin.status);
+  const note = creditNote(spin.status, spin.creditedTo ?? null);
 
   return (
     <section className="space-y-3">
@@ -447,7 +447,10 @@ function whyNot(reason: WheelIneligibilityReason, minimum: ReactNode): ReactNode
  * landed. Both get their own wording rather than being folded into "on its way" — a player told to
  * wait for a credit that is never coming writes to support, and rightly.
  */
-function creditNote(status: WheelSpinStatus): { text: string; tone: string } {
+function creditNote(
+  status: WheelSpinStatus,
+  creditedTo: WheelSpinView["creditedTo"] | null,
+): { text: string; tone: string } {
   switch (status) {
     case "NO_PRIZE":
       return {
@@ -456,9 +459,15 @@ function creditNote(status: WheelSpinStatus): { text: string; tone: string } {
       };
     case "AWARDED":
     case "CREDITING":
-      return { text: "جارٍ إضافة الجائزة إلى رصيدك…", tone: "bg-warn-soft text-warn" };
+      return { text: "جارٍ إضافة الجائزة إلى محفظة البونص…", tone: "bg-warn-soft text-warn" };
     case "CREDITED":
-      return { text: "أُضيفت الجائزة إلى رصيدك", tone: "bg-ok-soft text-ok" };
+      // Every prize since 2026-09-27 lands in the bonus wallet; an older spin's was paid into the
+      // casino balance, which the same sentence would misdescribe — so it keeps the old one.
+      return {
+        text:
+          creditedTo === "ICHANCY" ? "أُضيفت الجائزة إلى رصيدك" : "🎁 انضافت الجائزة لمحفظة البونص",
+        tone: "bg-ok-soft text-ok",
+      };
     case "CREDIT_FAILED":
     case "NEEDS_RECONCILIATION":
       return {

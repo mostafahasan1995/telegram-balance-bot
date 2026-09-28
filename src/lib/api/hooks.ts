@@ -24,18 +24,27 @@ import {
 import { api } from "./client";
 import { tenantSlug } from "./runtime-config";
 import type {
+  BonusAwardView,
   Branding,
   CasinoCredentials,
   DepositStatus,
   DepositView,
+  GiftLimitsView,
+  GiftRecipientPreviewView,
+  GiftStatus,
   MeResponse,
   Paginated,
   PaymentMethodView,
+  PlayerBonusTransferView,
+  PlayerBonusView,
+  PlayerGiftView,
+  PlayerReferralSummaryView,
   PlayerWheelView,
   PlayerWithdrawalView,
   SpinResultView,
   WalletView,
   WheelSpinStatus,
+  WinShareView,
   WithdrawalStatus,
 } from "./types";
 
@@ -52,6 +61,15 @@ export const queryKeys = {
   withdrawals: ["withdrawals"] as const,
   casinoCredentials: ["casino-credentials"] as const,
   wheel: ["wheel"] as const,
+  /** The bonus wallet, its offers and latest lines — one read, so one key. */
+  bonus: ["bonus"] as const,
+  /** One prefix for the gift limits and the gift list: a new gift changes both. */
+  gifts: ["gifts"] as const,
+  giftLimits: ["gifts", "limits"] as const,
+  giftList: ["gifts", "list"] as const,
+  referrals: ["referrals"] as const,
+  /** The player's own shared wins (🏆). */
+  wins: ["wins"] as const,
   /** Keyed by slug: one webview only ever shows one operator, but the key must say which. */
   branding: (slug: string) => ["branding", slug] as const,
 };
@@ -87,7 +105,9 @@ const OPEN_DEPOSIT: readonly DepositStatus[] = [
   "AWAITING_PROOF",
   "SUBMITTED",
   "UNDER_REVIEW",
+  "PENDING_SECOND_APPROVAL",
   "APPROVED",
+  "CREDITING",
 ];
 
 export function isOpenDeposit(status: DepositStatus): boolean {
@@ -95,7 +115,14 @@ export function isOpenDeposit(status: DepositStatus): boolean {
 }
 
 /** The statuses a cash-out is still waiting on a person for — the ones worth polling. */
-const OPEN_WITHDRAWAL: readonly WithdrawalStatus[] = ["REQUESTED", "UNDER_REVIEW", "APPROVED"];
+const OPEN_WITHDRAWAL: readonly WithdrawalStatus[] = [
+  "REQUESTED",
+  "UNDER_REVIEW",
+  "APPROVED",
+  "DEBITING",
+  "DEBITED",
+  "PAYING",
+];
 
 export function isOpenWithdrawal(status: WithdrawalStatus): boolean {
   return OPEN_WITHDRAWAL.includes(status);
@@ -424,9 +451,234 @@ export function useSpinWheel(): UseMutationResult<SpinResultView, unknown, void>
     mutationFn: () => api<SpinResultView>("/v1/wheel/spin", { method: "POST" }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.wheel });
-      // A credited prize is real money on the casino side, so the balance on the home screen and
-      // the account screen is stale from this moment.
+      // Since 2026-09-27 a prize lands in the bonus wallet with the spin, so the 🔥 tab is stale
+      // from this moment. The casino balance is refreshed too, for a spin made before that change.
+      void client.invalidateQueries({ queryKey: queryKeys.bonus });
       void client.invalidateQueries({ queryKey: queryKeys.wallet });
+    },
+  });
+}
+
+// ── 🎁 إهداء رصيد ──────────────────────────────────────────────────────────────────────────
+
+/** The statuses a gift is still moving through — the worker settles them within seconds. */
+const SETTLING_GIFT: readonly GiftStatus[] = [
+  "REQUESTED",
+  "DEBITING",
+  "DEBITED",
+  "CREDITING",
+  "REFUNDING",
+];
+
+export function isSettlingGift(status: GiftStatus): boolean {
+  return SETTLING_GIFT.includes(status);
+}
+
+/** The operator's gift rules, today's usage and the balance. Re-read on focus, never polled. */
+export function useGiftLimits(enabled: boolean): UseQueryResult<GiftLimitsView> {
+  return useQuery({
+    queryKey: queryKeys.giftLimits,
+    queryFn: () => api<GiftLimitsView>("/v1/gifts/limits"),
+    enabled,
+    staleTime: 15 * SECOND,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * The player's gifts, sent and received, newest first.
+ *
+ * POLLED ONLY WHILE ONE OF THEIR OWN IS STILL MOVING, like the wheel's prize: the transfer runs on
+ * a worker a few seconds after the tap, and the row has to settle by itself while the player
+ * watches it. The moment nothing is moving, the polling stops.
+ */
+export function useGifts(enabled: boolean): UseQueryResult<PlayerGiftView[]> {
+  return useQuery({
+    queryKey: queryKeys.giftList,
+    queryFn: async () => {
+      return rowsOf(await api<Paginated<PlayerGiftView> | PlayerGiftView[]>("/v1/gifts?limit=20"));
+    },
+    enabled,
+    staleTime: 10 * SECOND,
+    refetchInterval: (query) => {
+      const rows = query.state.data;
+      if (rows === undefined) return false;
+      return rows.some((row) => row.direction === "SENT" && isSettlingGift(row.status))
+        ? 3 * SECOND
+        : false;
+    },
+  });
+}
+
+/**
+ * Who a typed recipient is — a first name and a masked handle, after every rule about the two
+ * players. A MUTATION, not a query: it runs when the player presses "check", never on a keystroke,
+ * and a refusal (not found, yourself, unavailable) is the answer the screen shows.
+ */
+export function useCheckGiftRecipient(): UseMutationResult<
+  GiftRecipientPreviewView,
+  unknown,
+  string
+> {
+  return useMutation({
+    mutationFn: (query: string) =>
+      api<GiftRecipientPreviewView>(`/v1/gifts/recipient?query=${encodeURIComponent(query)}`),
+  });
+}
+
+export interface CreateGiftInput {
+  /** Exactly the text the recipient check answered for. */
+  recipient: string;
+  /** The decimal the player typed, normalised — "10000.00". Never minor units, never a number. */
+  amount: string;
+  currencyCode: string;
+}
+
+/**
+ * Give. The idempotency key is minted per submission, for the deposit's reason: a phone that
+ * changes network mid-POST retries the same gesture, and a gift sent twice is the player's money
+ * given away twice.
+ */
+export function useCreateGift(): UseMutationResult<PlayerGiftView, unknown, CreateGiftInput> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateGiftInput) =>
+      api<PlayerGiftView>("/v1/gifts", {
+        method: "POST",
+        idempotencyKey: newIdempotencyKey(),
+        body: {
+          recipient: input.recipient,
+          amount: moneyBody(input.amount, input.currencyCode),
+        },
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.gifts });
+      // The debit lands seconds later; the balance on every screen is stale from this moment.
+      void client.invalidateQueries({ queryKey: queryKeys.wallet });
+    },
+  });
+}
+
+/**
+ * The referral screen: the invite link, the terms priced on 100,000 lost, the player's figures and
+ * latest earnings. Refetched on focus, not polled: the figures move once per settlement period, on
+ * the backend's clock.
+ */
+export function useReferrals(enabled: boolean): UseQueryResult<PlayerReferralSummaryView> {
+  return useQuery({
+    queryKey: queryKeys.referrals,
+    queryFn: () => api<PlayerReferralSummaryView>("/v1/referrals"),
+    enabled,
+    staleTime: MINUTE,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * 🔥 العروض: the bonus wallet, the bar to the threshold, the offers running now, the latest lines.
+ *
+ * POLLED ONLY WHILE A MOVE IS ON ITS WAY. A move to the casino balance is credited by a worker, so
+ * the card has to settle by itself while the player watches it; the moment nothing is in flight the
+ * polling stops.
+ */
+export function useBonus(enabled: boolean): UseQueryResult<PlayerBonusView> {
+  return useQuery({
+    queryKey: queryKeys.bonus,
+    queryFn: () => api<PlayerBonusView>("/v1/bonus"),
+    enabled,
+    staleTime: 15 * SECOND,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => (query.state.data?.pendingTransfer != null ? 5 * SECOND : false),
+  });
+}
+
+/** «استلم الهدية». Once per player on the server; the key makes a retried tap answer with the first. */
+export function useClaimBonusOffer(): UseMutationResult<BonusAwardView, unknown, string> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (offerId: string) =>
+      api<BonusAwardView>(`/v1/bonus/offers/${encodeURIComponent(offerId)}/claim`, {
+        method: "POST",
+        idempotencyKey: newIdempotencyKey(),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.bonus });
+    },
+  });
+}
+
+/** «عندي كود». The code goes as typed; the server normalises case, spaces and Arabic digits. */
+export function useRedeemBonusCode(): UseMutationResult<BonusAwardView, unknown, string> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) =>
+      api<BonusAwardView>("/v1/bonus/redeem", {
+        method: "POST",
+        idempotencyKey: newIdempotencyKey(),
+        body: { code },
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.bonus });
+    },
+  });
+}
+
+/** «حوّل للرصيد»: the WHOLE wallet, once it reached the threshold. The credit lands seconds later. */
+export function useBonusTransfer(): UseMutationResult<PlayerBonusTransferView, unknown, void> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api<PlayerBonusTransferView>("/v1/bonus/transfer", {
+        method: "POST",
+        idempotencyKey: newIdempotencyKey(),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.bonus });
+      // The casino balance is about to grow: every screen showing it is stale from this moment.
+      void client.invalidateQueries({ queryKey: queryKeys.wallet });
+    },
+  });
+}
+
+/**
+ * 🏆 The player's own shared wins, newest first, with where each one stands. Polled only while one
+ * is still waiting for staff — the moment it is posted (or not) the screen says so by itself.
+ */
+export function useMyWins(enabled: boolean): UseQueryResult<WinShareView[]> {
+  return useQuery({
+    queryKey: queryKeys.wins,
+    queryFn: async () => rowsOf(await api<Paginated<WinShareView> | WinShareView[]>("/v1/wins")),
+    enabled,
+    staleTime: 15 * SECOND,
+    refetchInterval: (query) => {
+      const rows = query.state.data;
+      if (rows === undefined) return false;
+      return rows.some((row) => row.status === "PENDING") ? 20 * SECOND : false;
+    },
+  });
+}
+
+export interface ShareWinInput {
+  file: File;
+  caption: string;
+}
+
+/**
+ * One win: the photo or video as multipart `file`, and the player's words as `caption`. No
+ * idempotency key — the server caps shares per hour, and a retried upload is at worst a second
+ * card staff reject in one tap.
+ */
+export function useShareWin(): UseMutationResult<WinShareView, unknown, ShareWinInput> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, caption }: ShareWinInput) => {
+      const body = new FormData();
+      body.append("file", file, file.name);
+      if (caption.trim().length > 0) body.append("caption", caption.trim());
+      return api<WinShareView>("/v1/wins", { method: "POST", body });
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.wins });
     },
   });
 }

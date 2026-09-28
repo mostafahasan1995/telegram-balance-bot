@@ -49,15 +49,24 @@ export interface MeResponse {
   };
 }
 
+/**
+ * Every status the backend's `deposit_status` can send — the history screen shows them all, so a
+ * status missing here would be a row the app cannot describe. (CANCELLED is kept for older rows.)
+ */
 export type DepositStatus =
   | "DRAFT"
   | "AWAITING_PROOF"
   | "SUBMITTED"
   | "UNDER_REVIEW"
+  | "PENDING_SECOND_APPROVAL"
   | "APPROVED"
+  | "CREDITING"
   | "CREDITED"
+  | "CREDIT_FAILED"
+  | "NEEDS_RECONCILIATION"
   | "REJECTED"
   | "EXPIRED"
+  | "REVERSED"
   | "CANCELLED";
 
 export interface PendingDepositView {
@@ -152,8 +161,20 @@ export interface DepositView {
   destination: DepositDestinationView | null;
 }
 
+/** `withdrawal_status`, all of it (UNDER_REVIEW and FAILED are kept for older answers). */
 export type WithdrawalStatus =
-  "REQUESTED" | "UNDER_REVIEW" | "APPROVED" | "PAID" | "REJECTED" | "CANCELLED" | "FAILED";
+  | "REQUESTED"
+  | "UNDER_REVIEW"
+  | "APPROVED"
+  | "DEBITING"
+  | "DEBITED"
+  | "PAYING"
+  | "PAID"
+  | "DEBIT_FAILED"
+  | "NEEDS_RECONCILIATION"
+  | "REJECTED"
+  | "CANCELLED"
+  | "FAILED";
 
 export interface PlayerWithdrawalView {
   shortId: string;
@@ -217,6 +238,11 @@ export interface Branding {
   backgroundUrl: string | null;
   wheelBackgroundUrl: string | null;
   currencyCode: string;
+  /**
+   * The Ichancy player site's games page — where the home screen's 🎮 tile goes, the same link as
+   * the bot's «🎮 ألعاب Ichancy». Optional: a backend older than the field simply never sends it.
+   */
+  gamesUrl?: string | null;
 }
 
 /**
@@ -248,6 +274,11 @@ export interface WheelSpinView {
   status: WheelSpinStatus;
   createdAt: string;
   creditedAt: string | null;
+  /**
+   * Where a CREDITED prize went: the bonus wallet (every spin since 2026-09-27) or the casino
+   * balance (older spins). Optional: a backend older than the field never sends it.
+   */
+  creditedTo?: "BONUS_WALLET" | "ICHANCY" | null;
 }
 
 /** Why a player cannot spin right now. */
@@ -282,4 +313,237 @@ export interface SpinResultView {
   landOn: number | null;
   /** True when this answered with the player's existing spin instead of making a new one. */
   replayed: boolean;
+}
+
+/**
+ * 🎁 إهداء رصيد — a gift's status, in the backend's own names (`gift_status`).
+ *
+ * `NEEDS_RECONCILIATION` is NOT a failure: nobody could prove where the money is yet, and a person
+ * is checking. `DEBIT_FAILED` moved nothing. `REFUNDED` means the amount came back to the sender.
+ */
+export type GiftStatus =
+  | "REQUESTED"
+  | "DEBITING"
+  | "DEBITED"
+  | "CREDITING"
+  | "COMPLETED"
+  | "DEBIT_FAILED"
+  | "REFUNDING"
+  | "REFUNDED"
+  | "NEEDS_RECONCILIATION";
+
+/** The other player, as much as a player may know: a first name and a masked handle. */
+export interface GiftCounterpartyView {
+  firstName: string | null;
+  /** «@ah***d», or null when they have no Telegram username. */
+  maskedUsername: string | null;
+}
+
+/** GET /v1/gifts and GET /v1/gifts/:shortId — one of the player's own gifts. */
+export interface PlayerGiftView {
+  shortId: string;
+  /** A RECEIVED gift is always COMPLETED: a recipient never sees an attempt that missed them. */
+  direction: "SENT" | "RECEIVED";
+  status: GiftStatus;
+  amount: Money;
+  counterparty: GiftCounterpartyView;
+  createdAt: string;
+  completedAt: string | null;
+  refundedAt: string | null;
+}
+
+/** GET /v1/gifts/limits — the operator's rules, what is left of today, and the balance. */
+export interface GiftLimitsView {
+  enabled: boolean;
+  currencyCode: string;
+  min: Money;
+  max: Money;
+  dailyCount: number;
+  dailyAmount: Money;
+  usedTodayCount: number;
+  usedTodayAmount: Money;
+  remainingTodayCount: number;
+  remainingTodayAmount: Money;
+  /** Null means the casino could not be read — never that the balance is zero. */
+  balance: Money | null;
+}
+
+/** GET /v1/gifts/recipient?query= — who that text names. */
+export interface GiftRecipientPreviewView extends GiftCounterpartyView {
+  /** The text that was checked, echoed back so the app sends exactly it. */
+  query: string;
+}
+
+/** How often referral earnings are settled: Damascus midnights; a week runs Saturday to Friday. */
+export type ReferralSettlementPeriod = "DAILY" | "WEEKLY";
+
+/** Only CREDITED reached the bonus wallet; BELOW_MINIMUM was worked out and held under the minimum. */
+export type ReferralEarningStatus =
+  "CREDITED" | "BELOW_MINIMUM" | "NOTHING_DUE" | "REFERRER_INACTIVE" | "INELIGIBLE";
+
+/** One of the player's own referral earnings. */
+export interface PlayerReferralEarningView {
+  id: string;
+  kind: "LOSS_COMMISSION" | "FIRST_DEPOSIT_REWARD";
+  periodKey: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  /** The invited friend's first name, or their @username. */
+  friendName: string | null;
+  amount: string;
+  amountMinor: string;
+  status: ReferralEarningStatus;
+  createdAt: string;
+}
+
+/** GET /v1/referrals — the player's referral screen (the bot's 🤝 renders the same object). */
+export interface PlayerReferralSummaryView {
+  /** False: the operator has the programme off. */
+  enabled: boolean;
+  /** `https://t.me/<bot>?start=ref_<telegram id>`; null when it cannot be built. */
+  inviteLink: string | null;
+  currencyCode: string;
+  terms: {
+    commissionBps: number;
+    /** The rate as a person reads it: "10", "2.5". */
+    commissionPercent: string;
+    settlementPeriod: ReferralSettlementPeriod;
+    minPayout: string;
+    minPayoutMinor: string;
+    signupReward: string;
+    signupRewardMinor: string;
+    /** 100,000 lost, priced at the rate: what the inviter earns from it. */
+    example: { loss: string; lossMinor: string; commission: string; commissionMinor: string };
+  };
+  stats: { invited: number; active: number; earned: string; earnedMinor: string };
+  lastPeriod: {
+    periodKey: string;
+    periodStart: string;
+    periodEnd: string;
+    earned: string;
+    earnedMinor: string;
+  } | null;
+  nextSettlementAt: string | null;
+  recent: PlayerReferralEarningView[];
+}
+
+// ── 🔥 العروض: the bonus wallet, offers and codes (backend src/modules/bonus/views/bonus.view.ts) ──
+
+/** Why a wallet line exists. The first six are awards; the last two are the wallet's own moves. */
+export type BonusEntrySource =
+  | "WELCOME"
+  | "OFFER"
+  | "PROMO_CODE"
+  | "WHEEL"
+  | "REFERRAL"
+  | "ADJUSTMENT"
+  | "TRANSFER"
+  | "TRANSFER_REFUND";
+
+/** WELCOME pays itself to each new account; TIMED_GIFT is claimed once, while it runs. */
+export type BonusOfferKind = "WELCOME" | "TIMED_GIFT";
+
+/** A move of the wallet to the casino balance. CREDITED and REFUNDED are final. */
+export type BonusTransferStatus =
+  "REQUESTED" | "CREDITING" | "CREDITED" | "REFUNDED" | "NEEDS_RECONCILIATION";
+
+/** Why the wallet cannot be moved now. */
+export type BonusTransferBlockReason =
+  | "OPERATOR_PAUSED"
+  | "EMPTY"
+  | "BELOW_THRESHOLD"
+  | "NOT_LINKED"
+  | "PLAYER_NOT_ACTIVE"
+  | "IN_FLIGHT";
+
+/** One wallet line. `amount` is SIGNED: a move out is negative. */
+export interface BonusEntryView {
+  id: string;
+  source: BonusEntrySource;
+  /** The Arabic line, as the bot shows it. */
+  description: string;
+  amount: string;
+  amountMinor: string;
+  balanceAfter: string;
+  balanceAfterMinor: string;
+  createdAt: string;
+}
+
+export interface PlayerOfferView {
+  id: string;
+  kind: BonusOfferKind;
+  title: string;
+  description: string | null;
+  amount: string;
+  amountMinor: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  /** A running gift this player has not claimed yet. */
+  claimable: boolean;
+  /** The player already has it. */
+  claimed: boolean;
+}
+
+export interface PlayerBonusTransferView {
+  id: string;
+  shortId: string;
+  status: BonusTransferStatus;
+  amount: string;
+  amountMinor: string;
+  createdAt: string;
+  creditedAt: string | null;
+  refundedAt: string | null;
+}
+
+/** GET /v1/bonus — everything the 🔥 tab shows. */
+export interface PlayerBonusView {
+  /** False while the operator has promotions off: nothing to claim or redeem (the wallet stays). */
+  enabled: boolean;
+  currencyCode: string;
+  balance: string;
+  balanceMinor: string;
+  /** The wallet can be moved once it holds this much. */
+  threshold: string;
+  thresholdMinor: string;
+  /** 0–10000, never full before the wallet can move. */
+  progressBps: number;
+  canTransfer: boolean;
+  transferBlockedReason: BonusTransferBlockReason | null;
+  pendingTransfer: PlayerBonusTransferView | null;
+  offers: PlayerOfferView[];
+  /** The latest lines, newest first. */
+  entries: BonusEntryView[];
+}
+
+/** POST /v1/bonus/offers/:id/claim and POST /v1/bonus/redeem. */
+export interface BonusAwardView {
+  amount: string;
+  amountMinor: string;
+  balance: string;
+  balanceMinor: string;
+  /** The redeemed code (uppercase), or null for a claim. */
+  code: string | null;
+  /** The offer's title, or null for a code. */
+  title: string | null;
+}
+
+/**
+ * 🏆 شارك إصابتك (2026-09-27): where a shared win stands — waiting for staff, posted, or not
+ * posted. `REJECTED` is shown softly: the player was thanked, and may share another.
+ */
+export type WinShareStatus = "PENDING" | "PUBLISHED" | "REJECTED";
+
+/** POST /v1/wins and GET /v1/wins — one of the player's own shares. */
+export interface WinShareView {
+  id: string;
+  status: WinShareStatus;
+  via: "BOT" | "APP";
+  mediaKind: "PHOTO" | "VIDEO" | "DOCUMENT";
+  caption: string | null;
+  /** The photo or video; null for a video too big for the server to fetch back (use the thumb). */
+  mediaUrl: string | null;
+  /** A video's still; null for a photo. */
+  thumbnailUrl: string | null;
+  createdAt: string;
+  decidedAt: string | null;
 }
